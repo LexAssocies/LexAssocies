@@ -1,6 +1,11 @@
 """Private administration, content placement and first-party aggregate statistics."""
 import json, secrets, re, time
 from pathlib import Path
+try:
+ from supabase_client import configured as supabase_configured, request as supabase_request
+except Exception:
+ supabase_configured=lambda: False
+ supabase_request=lambda *a,**k: None
 
 TAXONOMY=json.loads((Path(__file__).parent/'taxonomy.json').read_text(encoding='utf-8'))
 SECTIONS=('formations','boutique','bibliotheque','blog','etudiants','professionnels','entreprises')
@@ -35,6 +40,12 @@ def admin_post(c,path,data,uid,now):
   status='published' if data.get('restore') else 'archived'
   changed=c.execute('UPDATE items SET status=?,updated=? WHERE id=?',(status,now,str(data.get('id','')))).rowcount
   if not changed:raise ValueError('Contenu introuvable.')
+  if supabase_configured():
+   try:
+    import uuid
+    rid=str(uuid.uuid5(uuid.NAMESPACE_URL,'lex-associes:'+str(data.get('id',''))))
+    supabase_request('/rest/v1/contents?id=eq.'+rid,'PATCH',{'status':status},None)
+   except Exception: pass
   return {'ok':True}
  if path=='/api/admin/order':
   oid=str(data.get('id',''));status=data.get('status');note=str(data.get('note','')).strip()[:3000]
