@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs, unquote
 
 ROOT=Path(__file__).resolve().parent
-DATA=Path(os.environ.get('LEX_DATA_DIR',ROOT/'data'))
+DATA=Path(os.environ.get('LEX_DATA_DIR', '/tmp/lex-associes-data' if os.environ.get('VERCEL') else ROOT/'data'))
 DATA.mkdir(parents=True,exist_ok=True)
 (DATA/'files').mkdir(exist_ok=True)
 PORT=int(os.environ.get('LEX_PORT','4180'))
