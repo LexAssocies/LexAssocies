@@ -120,7 +120,11 @@ class App(SimpleHTTPRequestHandler):
    with db() as c:
     u=self.identity(c)
     if path=='/api/bootstrap':
-     items=remote_items() or [pack(r) for r in c.execute("SELECT * FROM items WHERE status='published' ORDER BY updated DESC")]
+     local_items=[pack(r) for r in c.execute("SELECT * FROM items WHERE status='published' ORDER BY updated DESC")]
+     # Pendant la migration, la copie locale reste prioritaire pour préserver
+     # les modifications de l'administration qui n'ont pas encore été poussées.
+     local_ids={i['id'] for i in local_items}
+     items=local_items+[i for i in remote_items() if i.get('id') not in local_ids]
      return self.reply({'items':items,'user':{k:u[k] for k in ('id','name','email','role')} if u else None,'setup':not c.execute("SELECT 1 FROM users WHERE role='owner'").fetchone(),'payments':False})
     if path.startswith('/api/item/'):
      itemid=unquote(path.split('/')[-1]);r=c.execute('SELECT * FROM items WHERE id=?',(itemid,)).fetchone()
