@@ -38,14 +38,13 @@ def validate_content(p):
 def admin_post(c,path,data,uid,now):
  if path=='/api/admin/archive':
   status='published' if data.get('restore') else 'archived'
+  row=c.execute('SELECT * FROM items WHERE id=?',(str(data.get('id','')),)).fetchone()
+  if not row:raise ValueError('Contenu introuvable.')
+  if supabase_configured():
+   from cloud_state import save_content
+   save_content(row['id'],row['kind'],row['title'],row['category'],status,json.loads(row['payload']))
   changed=c.execute('UPDATE items SET status=?,updated=? WHERE id=?',(status,now,str(data.get('id','')))).rowcount
   if not changed:raise ValueError('Contenu introuvable.')
-  if supabase_configured():
-   try:
-    import uuid
-    rid=str(uuid.uuid5(uuid.NAMESPACE_URL,'lex-associes:'+str(data.get('id',''))))
-    supabase_request('/rest/v1/contents?id=eq.'+rid,'PATCH',{'status':status},None)
-   except Exception: pass
   return {'ok':True}
  if path=='/api/admin/order':
   oid=str(data.get('id',''));status=data.get('status');note=str(data.get('note','')).strip()[:3000]

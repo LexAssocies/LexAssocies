@@ -28,7 +28,7 @@ def check_password(u,value,password):
 
 def account_action(c,path,data,u,password,email):
  if path not in ('/api/security/profile','/api/security/logout-all','/api/security/recovery-codes','/api/security/create-user','/api/security/user'):return None
- c.execute('BEGIN IMMEDIATE')
+ if not c.in_transaction:c.execute('BEGIN IMMEDIATE')
  # Re-read role/status under the write lock to avoid a concurrent privilege change.
  u=c.execute('SELECT * FROM users WHERE id=?',(u['id'],)).fetchone()
  if suspended(c,u['id']):raise PermissionError('Ce compte est suspendu.')
@@ -78,7 +78,7 @@ def account_action(c,path,data,u,password,email):
 def recover(c,data,password,email):
  mail=email(data.get('email'));new=str(data.get('new_password',''));token=str(data.get('token','')).strip()
  if not 10<=len(new)<=256:raise ValueError('Choisissez un mot de passe de 10 à 256 caractères.')
- c.execute('BEGIN IMMEDIATE')
+ if not c.in_transaction:c.execute('BEGIN IMMEDIATE')
  row=c.execute('SELECT account_tokens.*,users.email FROM account_tokens JOIN users ON users.id=account_tokens.user_id WHERE token=? AND email=? AND expires>?',(digest(token),mail,time.time())).fetchone()
  if not row or suspended(c,row['user_id']):raise ValueError('Code invalide, expiré ou compte indisponible.')
  uid=row['user_id'];u=c.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()

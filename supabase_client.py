@@ -21,8 +21,10 @@ def configured():
 def request(path, method='GET', payload=None, token=None):
     if not configured():
         raise RuntimeError('Supabase non configuré')
-    active_key = token or SUPABASE_SERVICE_KEY or SUPABASE_KEY
-    headers = {'apikey': active_key, 'Authorization': 'Bearer ' + active_key}
+    active_key = SUPABASE_KEY if token else (SUPABASE_SERVICE_KEY or SUPABASE_KEY)
+    headers = {'apikey': active_key, 'Authorization': 'Bearer ' + (token or active_key)}
+    if method == 'POST' and 'on_conflict=' in path:
+        headers['Prefer'] = 'resolution=merge-duplicates,return=minimal'
     data = None
     if payload is not None:
         data = json.dumps(payload).encode('utf-8')

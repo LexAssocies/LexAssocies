@@ -12,6 +12,7 @@ PORT=int(os.environ.get('LEX_PORT','4180'))
 from security import STAFF, initialize_security, suspended, audit, get_security, account_action, recover
 from admin_support import initialize_admin, admin_get, admin_post, track_visit, validate_content
 import seo
+import cloud_state
 try:
  from supabase_client import configured as supabase_configured, request as supabase_request, upload_file as supabase_upload, auth_login as supabase_auth_login, auth_user as supabase_auth_user
 except Exception:
@@ -20,8 +21,13 @@ except Exception:
  supabase_upload=lambda *a,**k: None
  supabase_auth_login=lambda *a,**k: None
  supabase_auth_user=lambda *a,**k: None
+class Database(sqlite3.Connection):
+ def __exit__(self,*args):
+  try:return super().__exit__(*args)
+  finally:self.close()
+
 def db():
- c=sqlite3.connect(DATA/'lex.sqlite',timeout=15);c.row_factory=sqlite3.Row;c.execute('PRAGMA foreign_keys=ON');return c
+ c=sqlite3.connect(DATA/'lex.sqlite',timeout=15,factory=Database);c.row_factory=sqlite3.Row;c.execute('PRAGMA foreign_keys=ON');return c
 def initialize():
  with db() as c:
   c.executescript('''
@@ -95,6 +101,21 @@ class App(SimpleHTTPRequestHandler):
    for value in (cookie if isinstance(cookie,(list,tuple)) else [cookie]): self.send_header('Set-Cookie',value)
   self.end_headers();self.wfile.write(raw)
  def identity(self,c):
+  if cloud_state.enabled():
+   signed=re.search(r'(?:^|;\s*)lex_cloud=([^;]+)',self.headers.get('Cookie',''))
+   if signed:
+    claims=cloud_state.verify_user(signed.group(1))
+    if claims:
+     try:uuid.UUID(claims['id']);remote_id=True
+     except ValueError:remote_id=False
+     if remote_id:
+      profile=supabase_request('/rest/v1/profiles?select=name,role,suspended&id=eq.'+claims['id']) or []
+      if not profile or profile[0].get('suspended'):return None
+      claims['role']=profile[0]['role'];claims['name']=profile[0].get('name') or claims['name']
+     if not c.execute('SELECT 1 FROM users WHERE id=?',(claims['id'],)).fetchone():c.execute('INSERT OR IGNORE INTO users VALUES(?,?,?,?,?,?)',(claims['id'],claims['name'],claims['email'],password(secrets.token_urlsafe(24)),claims['role'],time.time()))
+     c.execute('UPDATE users SET name=?,role=? WHERE id=?',(claims['name'],claims['role'],claims['id']))
+     found=c.execute('SELECT * FROM users WHERE id=?',(claims['id'],)).fetchone()
+     if found and not suspended(c,found['id']):return found
   cookie=self.headers.get('Cookie','');match=re.search(r'(?:^|;\s*)lex_session=([a-f0-9]{64})(?:;|$)',cookie)
   if match:
    found=c.execute('SELECT users.* FROM users JOIN sessions ON sessions.user_id=users.id WHERE token=? AND expires>? AND NOT EXISTS(SELECT 1 FROM user_security WHERE user_id=users.id AND suspended=1)',(hashlib.sha256(match[1].encode()).hexdigest(),time.time())).fetchone()
@@ -122,7 +143,7 @@ class App(SimpleHTTPRequestHandler):
  def allowed_origin(self):
   origin=self.headers.get('Origin','')
   if origin in (f'http://localhost:{PORT}',f'http://127.0.0.1:{PORT}'): return True
-  return bool(os.environ.get('VERCEL')) and origin.startswith('https://')
+  return bool(os.environ.get('VERCEL')) and urlparse(origin).scheme=='https' and urlparse(origin).netloc.lower()==self.headers.get('Host','').lower()
  def do_GET(self):
   if not self.allowed_host():return self.reply({'error':'Hôte non autorisé.'},403)
   path=urlparse(self.path).path
@@ -141,6 +162,7 @@ class App(SimpleHTTPRequestHandler):
    return super().do_GET()
   try:
    with db() as c:
+    if cloud_state.enabled():cloud_state.sync_catalogue(c)
     u=self.identity(c)
     if path=='/api/bootstrap':
      # Une seule source alimente l'administration et le site public pendant
@@ -197,8 +219,8 @@ class App(SimpleHTTPRequestHandler):
      return self.reply(admin_get(c,parse_qs(urlparse(self.path).query)))
     if path=='/api/admin':
      u=self.need(c,True)
-     if u['role']=='editor':return self.reply({'items':[pack(r,True) for r in c.execute('SELECT * FROM items ORDER BY updated DESC')],'messages':[],'newsletter':[],'orders':[],'users':[]})
-     return self.reply({'items':[pack(r,True) for r in c.execute('SELECT * FROM items ORDER BY updated DESC')],'messages':[dict(r) for r in c.execute('SELECT * FROM messages ORDER BY created DESC')],'newsletter':[dict(r) for r in c.execute('SELECT * FROM newsletter ORDER BY created DESC')],'orders':[dict(r) for r in c.execute('SELECT * FROM orders ORDER BY created DESC')],'users':[dict(r) for r in c.execute('SELECT id,name,email,role,created FROM users')]})
+     if u['role']=='editor':return self.reply({'items':[pack(r,True) for r in c.execute("SELECT * FROM items WHERE status!='unavailable' ORDER BY updated DESC")],'messages':[],'newsletter':[],'orders':[],'users':[]})
+     return self.reply({'items':[pack(r,True) for r in c.execute("SELECT * FROM items WHERE status!='unavailable' ORDER BY updated DESC")],'messages':[dict(r) for r in c.execute('SELECT * FROM messages ORDER BY created DESC')],'newsletter':[dict(r) for r in c.execute('SELECT * FROM newsletter ORDER BY created DESC')],'orders':[dict(r) for r in c.execute('SELECT * FROM orders ORDER BY created DESC')],'users':[dict(r) for r in c.execute('SELECT id,name,email,role,created FROM users')]})
     if path.startswith('/api/file/'):
      u=self.need(c);r=c.execute('SELECT uploads.*,items.payload,items.status FROM uploads JOIN items ON uploads.item_id=items.id WHERE uploads.id=?',(path.split('/')[-1],)).fetchone()
      if not r:return self.reply({'error':'Fichier introuvable.'},404)
@@ -220,6 +242,7 @@ class App(SimpleHTTPRequestHandler):
    if length>15*1024*1024:raise ValueError('Fichier trop volumineux (10 Mo maximum).')
    data=json.loads(self.rfile.read(length));path=urlparse(self.path).path;now=time.time()
    with db() as c:
+    if cloud_state.enabled():cloud_state.sync_catalogue(c)
     self.transaction=c
     if path=='/api/visit':
      visitor=self.identity(c)
@@ -235,7 +258,7 @@ class App(SimpleHTTPRequestHandler):
       if len(pw)<10:raise ValueError('Choisissez un mot de passe de 10 caractères minimum.')
       name=clean(data.get('name'),160)
       if not name:raise ValueError('Indiquez votre nom.')
-      c.execute('BEGIN IMMEDIATE')
+      if not c.in_transaction:c.execute('BEGIN IMMEDIATE')
       role='member'
       if path=='/api/admin/setup':
        if c.execute("SELECT 1 FROM users WHERE role='owner'").fetchone():raise ValueError('Un administrateur est déjà configuré.')
@@ -249,20 +272,27 @@ class App(SimpleHTTPRequestHandler):
      if not local_ok and path=='/api/login' and supabase_configured():
       try:
        remote=supabase_auth_login(mail,pw); remote_token=remote.get('access_token'); profile=(supabase_request('/rest/v1/profiles?select=id,name,role,suspended&id=eq.'+remote['user']['id']) or [])
-       if remote.get('user') and not u:
-        rid=secrets.token_hex(12); name=(profile[0].get('name') if profile else '') or mail.split('@')[0]
+       if remote.get('user') and (not profile or not profile[0].get('suspended')):
+        rid=remote['user']['id']; name=(profile[0].get('name') if profile else '') or mail.split('@')[0]
         role=(profile[0].get('role') if profile else 'member') or 'member'
-        c.execute('INSERT INTO users VALUES(?,?,?,?,?,?)',(rid,name,mail,password(secrets.token_urlsafe(24)),role,now));u=c.execute('SELECT * FROM users WHERE id=?',(rid,)).fetchone();local_ok=True
+        if not u:c.execute('INSERT INTO users VALUES(?,?,?,?,?,?)',(rid,name,mail,password(secrets.token_urlsafe(24)),role,now))
+        c.execute('UPDATE users SET name=?,role=? WHERE email=?',(name,role,mail));u=c.execute('SELECT * FROM users WHERE email=?',(mail,)).fetchone();local_ok=True
       except Exception: pass
      if not local_ok:raise ValueError('E-mail ou mot de passe incorrect.')
+     # Même pour un compte local existant, établir une session Supabase
+     # persistante afin que les requêtes suivantes Vercel restent authentifiées.
+     if path=='/api/login' and supabase_configured() and not remote_token:
+      try: remote_token=supabase_auth_login(mail,pw).get('access_token')
+      except Exception: pass
      token=secrets.token_hex(32);c.execute('DELETE FROM sessions WHERE expires<?',(now,));c.execute('INSERT INTO sessions VALUES(?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),u['id'],now+86400*7));cookies=[f'lex_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800']
-     if remote_token: cookies.append(f'lex_supabase={remote_token}; Secure; SameSite=Lax; Path=/; Max-Age=604800')
+     if remote_token: cookies.append(f'lex_supabase={remote_token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600')
+     if cloud_state.enabled():cookies.append(f'lex_cloud={cloud_state.sign_user(u)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800')
      return self.reply({'ok':True},cookie=cookies)
     if path=='/api/logout':
      u=self.identity(c)
      cookie=self.headers.get('Cookie','');match=re.search(r'lex_session=([a-f0-9]{64})',cookie)
      if match:c.execute('DELETE FROM sessions WHERE token=?',(hashlib.sha256(match[1].encode()).hexdigest(),))
-     return self.reply({'ok':True},cookie='lex_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0')
+     return self.reply({'ok':True},cookie=['lex_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0','lex_supabase=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0','lex_cloud=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0'])
     if path=='/api/contact':
      name=clean(data.get('name'),160);body=clean(data.get('message'));mail=email(data.get('email'))
      if not name or not body:raise ValueError('Complétez votre nom et votre message.')
@@ -298,7 +328,7 @@ class App(SimpleHTTPRequestHandler):
      return self.reply({'ok':True})
     if path=='/api/notifications':c.execute('UPDATE notifications SET seen=1 WHERE user_id=?',(uid,));return self.reply({'ok':True})
     if path.startswith('/api/admin/'):
-     c.execute('BEGIN IMMEDIATE')
+     if not c.in_transaction:c.execute('BEGIN IMMEDIATE')
      u=self.need(c,True)
      if u['role']=='editor' and path not in ('/api/admin/item','/api/admin/upload','/api/admin/archive'):raise PermissionError('Le rôle rédacteur est limité aux contenus.')
      self.audit_actor=u;self.audit_action=path;self.audit_target=clean(data.get('id') or data.get('item_id') or data.get('item',{}).get('title'),250)
@@ -318,10 +348,7 @@ class App(SimpleHTTPRequestHandler):
        if m.get('video') and not str(m['video']).startswith('https://'):raise ValueError('La vidéo doit utiliser une adresse HTTPS.')
       c.execute('INSERT INTO items VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,title=excluded.title,category=excluded.category,status=excluded.status,payload=excluded.payload,updated=excluded.updated',(itemid,kind,title,clean(p.get('category'),120),status,json.dumps(p,ensure_ascii=False),now))
       if supabase_configured():
-       try:
-        remote_id=str(uuid.uuid5(uuid.NAMESPACE_URL,'lex-associes:'+itemid)); remote=dict(p); remote['_local_id']=itemid
-        supabase_request('/rest/v1/contents?on_conflict=id','POST',{'id':remote_id,'kind':kind,'title':title,'category':clean(p.get('category'),120),'status':status,'payload':remote},None)
-       except Exception: pass
+       cloud_state.save_content(itemid,kind,title,clean(p.get('category'),120),status,p)
       return self.reply({'ok':True,'id':itemid})
      if path=='/api/admin/upload':
       itemid=clean(data.get('item_id'),120)
@@ -382,7 +409,7 @@ class App(SimpleHTTPRequestHandler):
     elif path=='/api/event':
      if p['kind']!='event' or not p.get('date') or p.get('demo'):raise ValueError('Les inscriptions ouvriront après confirmation de l’événement.')
      if p.get('price',0)>0:raise ValueError('Le paiement doit être activé pour cet événement.')
-     c.execute('BEGIN IMMEDIATE')
+     if not c.in_transaction:c.execute('BEGIN IMMEDIATE')
      count=c.execute('SELECT count(*) FROM event_registrations WHERE item_id=?',(itemid,)).fetchone()[0]
      if p.get('capacity') and count>=int(p['capacity']):raise ValueError('Cet événement est complet.')
      c.execute('INSERT OR IGNORE INTO event_registrations VALUES(?,?,?)',(uid,itemid,now))
