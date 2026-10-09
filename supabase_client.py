@@ -42,7 +42,8 @@ def upload_file(bucket, path, raw, mime='application/octet-stream'):
         raise RuntimeError('Supabase non configuré')
     import urllib.request
     active_key=SUPABASE_SERVICE_KEY or SUPABASE_KEY
-    req=urllib.request.Request(SUPABASE_URL+'/storage/v1/object/'+bucket+'/'+path,
+    from urllib.parse import quote
+    req=urllib.request.Request(SUPABASE_URL+'/storage/v1/object/'+quote(bucket,safe='')+'/'+quote(path,safe='/'),
       data=raw, method='POST', headers={'apikey':active_key,'Authorization':'Bearer '+active_key,
       'Content-Type':mime,'x-upsert':'true'})
     with urllib.request.urlopen(req,timeout=30) as response:
@@ -60,3 +61,11 @@ def auth_login(email, password):
 
 def auth_user(token):
     return request('/auth/v1/user', token=token)
+
+def download_file(bucket, path):
+    from urllib.parse import quote
+    key = SUPABASE_SERVICE_KEY or SUPABASE_KEY
+    req = urllib.request.Request(SUPABASE_URL+'/storage/v1/object/authenticated/'+quote(bucket,safe='')+'/'+quote(path,safe='/'),
+        headers={'apikey':key,'Authorization':'Bearer '+key})
+    with urllib.request.urlopen(req, timeout=30) as response:
+        return response.read()

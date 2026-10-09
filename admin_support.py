@@ -9,7 +9,7 @@ except Exception:
 
 TAXONOMY=json.loads((Path(__file__).parent/'taxonomy.json').read_text(encoding='utf-8'))
 SECTIONS=('formations','boutique','bibliotheque','blog','etudiants','professionnels','entreprises')
-STATUSES=('pending_payment','processing','completed','cancelled')
+STATUSES=('pending','pending_payment','processing','completed','cancelled')
 
 def initialize_admin(c,data):
  c.executescript('''
@@ -51,8 +51,15 @@ def admin_post(c,path,data,uid,now):
   if status not in STATUSES:raise ValueError('Statut de commande invalide.')
   order=c.execute('SELECT * FROM orders WHERE id=?',(oid,)).fetchone()
   if not order:raise ValueError('Commande introuvable.')
+  update_id=secrets.token_hex(12)
+  if supabase_configured():
+   from cloud_state import save_order
+   history=[dict(r) for r in c.execute('SELECT * FROM order_updates WHERE order_id=? ORDER BY created',(oid,))]
+   history.append({'id':update_id,'admin_id':uid,'status':status,'note':note,'created':now})
+   buyer=c.execute('SELECT * FROM users WHERE id=?',(order['user_id'],)).fetchone()
+   save_order(oid,buyer,order['total'],json.loads(order['lines']),json.loads(order['delivery']),status,history)
   c.execute('UPDATE orders SET status=? WHERE id=?',(status,oid))
-  c.execute('INSERT INTO order_updates VALUES(?,?,?,?,?,?)',(secrets.token_hex(12),oid,uid,status,note,now))
+  c.execute('INSERT INTO order_updates VALUES(?,?,?,?,?,?)',(update_id,oid,uid,status,note,now))
   return {'ok':True}
  return None
 
@@ -82,5 +89,5 @@ def admin_get(c,query):
  daily=[dict(r) for r in c.execute("SELECT strftime('%Y-%m-%d',created,'unixepoch') day,count(*) views,count(DISTINCT visitor) visitors FROM visits WHERE event='view' AND created>=? GROUP BY day ORDER BY day",(since,))]
  orders=[]
  for row in c.execute('SELECT orders.*,users.name,users.email FROM orders JOIN users ON users.id=orders.user_id ORDER BY created DESC'):
-  o=dict(row);o['lines']=json.loads(o['lines']);o['history']=[dict(r) for r in c.execute('SELECT status,note,created FROM order_updates WHERE order_id=? ORDER BY created DESC',(o['id'],))];orders.append(o)
+  o=dict(row);o['lines']=json.loads(o['lines']);o['delivery']=json.loads(o['delivery']);o['history']=[dict(r) for r in c.execute('SELECT status,note,created FROM order_updates WHERE order_id=? ORDER BY created DESC',(o['id'],))];orders.append(o)
  return {'days':days,'totals':totals,'pages':pages,'clicks':clicks,'daily':daily,'orders':orders}

@@ -53,6 +53,8 @@ def initialize():
   CREATE INDEX IF NOT EXISTS idx_attempts ON attempts(ip,action,created);
   ''')
   initialize_admin(c,DATA)
+  if 'delivery' not in {r[1] for r in c.execute('PRAGMA table_info(orders)')}:
+   c.execute("ALTER TABLE orders ADD COLUMN delivery TEXT NOT NULL DEFAULT '{}'")
   initialize_security(c)
   if not c.execute('SELECT 1 FROM items LIMIT 1').fetchone():
    for item in json.loads((ROOT/'seed.json').read_text(encoding='utf-8')):
@@ -91,6 +93,10 @@ class App(SimpleHTTPRequestHandler):
  def headers_security(self):
   self.send_header('X-Content-Type-Options','nosniff');self.send_header('Referrer-Policy','same-origin');self.send_header('X-Frame-Options','DENY')
  def reply(self,data,status=200,cookie=None):
+  if status<400 and getattr(self,'cart_user',None) and getattr(self,'transaction',None) and cloud_state.enabled():
+   cart=[dict(x) for x in self.transaction.execute('SELECT item_id,quantity FROM cart WHERE user_id=?',(self.cart_user,))]
+   cart_cookie=f'lex_cart={cloud_state.sign_cart(self.cart_user,cart)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800'
+   cookie=(cookie if isinstance(cookie,list) else [cookie] if cookie else [])+[cart_cookie]
   if status<400 and getattr(self,'transaction',None):
    if getattr(self,'audit_actor',None):
     audit(self.transaction,self.audit_actor,self.audit_action,self.audit_target)
@@ -137,6 +143,14 @@ class App(SimpleHTTPRequestHandler):
   if not u:raise PermissionError('Connectez-vous pour continuer.')
   if admin and u['role'] not in STAFF:raise PermissionError('Accès réservé à l’administration.')
   return u
+ def load_cart(self,c,uid):
+  if not cloud_state.enabled():return
+  match=re.search(r'(?:^|;\s*)lex_cart=([^;]+)',self.headers.get('Cookie',''))
+  if match:
+   c.execute('DELETE FROM cart WHERE user_id=?',(uid,))
+   for item in cloud_state.verify_cart(match.group(1),uid):
+    if c.execute("SELECT 1 FROM items WHERE id=? AND status='published'",(item['item_id'],)).fetchone():
+     c.execute('INSERT OR IGNORE INTO cart VALUES(?,?,?)',(uid,item['item_id'],item['quantity']))
  def allowed_host(self):
   host=self.headers.get('Host','').split(':')[0].lower()
   return host in ('localhost','127.0.0.1') or bool(os.environ.get('VERCEL'))
@@ -186,6 +200,8 @@ class App(SimpleHTTPRequestHandler):
      return self.reply(data)
     if path=='/api/account':
      u=self.need(c);uid=u['id'];result={}
+     self.load_cart(c,uid)
+     if cloud_state.enabled():cloud_state.sync_orders(c)
      result['favorites']=[x[0] for x in c.execute('SELECT item_id FROM favorites WHERE user_id=?',(uid,))]
      result['enrollments']=[dict(x) for x in c.execute('SELECT item_id,created FROM enrollments WHERE user_id=?',(uid,))]
      result['progress']=[dict(x) for x in c.execute('SELECT item_id,module_id,completed FROM progress WHERE user_id=?',(uid,))]
@@ -216,9 +232,11 @@ class App(SimpleHTTPRequestHandler):
     if path=='/api/admin/overview':
      u=self.need(c,True)
      if u['role']=='editor':raise PermissionError('Accès réservé aux administrateurs.')
+     if cloud_state.enabled():cloud_state.sync_orders(c)
      return self.reply(admin_get(c,parse_qs(urlparse(self.path).query)))
     if path=='/api/admin':
      u=self.need(c,True)
+     if cloud_state.enabled() and u['role']!='editor':cloud_state.sync_orders(c)
      if u['role']=='editor':return self.reply({'items':[pack(r,True) for r in c.execute("SELECT * FROM items WHERE status!='unavailable' ORDER BY updated DESC")],'messages':[],'newsletter':[],'orders':[],'users':[]})
      return self.reply({'items':[pack(r,True) for r in c.execute("SELECT * FROM items WHERE status!='unavailable' ORDER BY updated DESC")],'messages':[dict(r) for r in c.execute('SELECT * FROM messages ORDER BY created DESC')],'newsletter':[dict(r) for r in c.execute('SELECT * FROM newsletter ORDER BY created DESC')],'orders':[dict(r) for r in c.execute('SELECT * FROM orders ORDER BY created DESC')],'users':[dict(r) for r in c.execute('SELECT id,name,email,role,created FROM users')]})
     if path.startswith('/api/file/'):
@@ -226,7 +244,11 @@ class App(SimpleHTTPRequestHandler):
      if not r:return self.reply({'error':'Fichier introuvable.'},404)
      p=json.loads(r['payload'])
      if u['role'] not in STAFF and (r['status']!='published' or (p.get('price')!=0 and not c.execute('SELECT 1 FROM enrollments WHERE user_id=? AND item_id=?',(u['id'],r['item_id'])).fetchone())):raise PermissionError('Ce contenu nécessite un accès autorisé.')
-     raw=(DATA/'files'/r['path']).read_bytes();c.execute('INSERT INTO downloads VALUES(?,?,?,?,?)',(secrets.token_hex(12),u['id'],r['id'],r['name'],time.time()));self.send_response(200);self.send_header('Content-Type','application/octet-stream');self.send_header('Content-Disposition',"attachment; filename*=UTF-8''"+__import__('urllib.parse',fromlist=['quote']).quote(r['name']));self.send_header('Content-Length',str(len(raw)));self.headers_security();self.end_headers();self.wfile.write(raw);return
+     if r['path'].startswith('supabase:'):
+      from supabase_client import download_file
+      raw=download_file('course-files',r['path'][9:])
+     else:raw=(DATA/'files'/r['path']).read_bytes()
+     c.execute('INSERT INTO downloads VALUES(?,?,?,?,?)',(secrets.token_hex(12),u['id'],r['id'],r['name'],time.time()));self.send_response(200);self.send_header('Content-Type','application/octet-stream');self.send_header('Content-Disposition',"attachment; filename*=UTF-8''"+__import__('urllib.parse',fromlist=['quote']).quote(r['name']));self.send_header('Content-Length',str(len(raw)));self.headers_security();self.end_headers();self.wfile.write(raw);return
     return self.reply({'error':'Page introuvable.'},404)
   except PermissionError as e:self.reply({'error':str(e)},403)
   except Exception:self.reply({'error':'Le service est momentanément indisponible.'},500)
@@ -311,6 +333,8 @@ class App(SimpleHTTPRequestHandler):
       except Exception: pass
      return self.reply({'ok':True,'message':'Votre inscription est enregistrée. Vous pourrez demander sa suppression au cabinet.'})
     u=self.need(c);uid=u['id']
+    if path in ('/api/cart','/api/order'):
+     self.load_cart(c,uid);self.cart_user=uid
     if path.startswith('/api/security/'):
      result=account_action(c,path,data,u,password,email)
      if result is None:return self.reply({'error':'Action inconnue.'},404)
@@ -330,8 +354,9 @@ class App(SimpleHTTPRequestHandler):
     if path.startswith('/api/admin/'):
      if not c.in_transaction:c.execute('BEGIN IMMEDIATE')
      u=self.need(c,True)
-     if u['role']=='editor' and path not in ('/api/admin/item','/api/admin/upload','/api/admin/archive'):raise PermissionError('Le rôle rédacteur est limité aux contenus.')
+     if u['role']=='editor' and path not in ('/api/admin/item','/api/admin/upload','/api/admin/upload-remove','/api/admin/archive'):raise PermissionError('Le rôle rédacteur est limité aux contenus.')
      self.audit_actor=u;self.audit_action=path;self.audit_target=clean(data.get('id') or data.get('item_id') or data.get('item',{}).get('title'),250)
+     if path=='/api/admin/order' and cloud_state.enabled():cloud_state.sync_orders(c)
      handled=admin_post(c,path,data,uid,now)
      if handled is not None:return self.reply(handled)
      if path=='/api/admin/item':
@@ -339,6 +364,9 @@ class App(SimpleHTTPRequestHandler):
       if kind not in ('formation','document','resource','article','event','live','trainer','plan','watch'):raise ValueError('Type de contenu invalide.')
       if not title:raise ValueError('Un titre est obligatoire.')
       if status not in ('draft','published','archived'):raise ValueError('Statut invalide.')
+      existing=c.execute('SELECT payload FROM items WHERE id=?',(itemid,)).fetchone()
+      if existing:p['_attachments']=json.loads(existing['payload']).get('_attachments',[])
+      else:p.pop('_attachments',None)
       p['price']=None if p.get('price') is None or p.get('price')=='' else int(p['price'])
       if p['price'] is not None and p['price']<0:raise ValueError('Prix invalide.')
       validate_content(p)
@@ -357,14 +385,42 @@ class App(SimpleHTTPRequestHandler):
       if Path(name).suffix.lower() not in ('.pdf','.docx','.xlsx','.pptx','.txt','.png','.jpg','.jpeg','.mp4'):raise ValueError('Format non pris en charge.')
       raw=base64.b64decode(data.get('content',''),validate=True)
       if len(raw)>10*1024*1024:raise ValueError('10 Mo maximum par fichier.')
-      fid=secrets.token_hex(20);(DATA/'files'/fid).write_bytes(raw);mime=mimetypes.guess_type(name)[0] or 'application/octet-stream';c.execute('INSERT INTO uploads VALUES(?,?,?,?,?,?)',(fid,itemid,name,mime,len(raw),fid));
+      fid=secrets.token_hex(20);mime=mimetypes.guess_type(name)[0] or 'application/octet-stream';file_path=fid
+      row=c.execute('SELECT * FROM items WHERE id=?',(itemid,)).fetchone();p=json.loads(row['payload'])
       if supabase_configured():
-       try: supabase_upload('course-files',itemid+'/'+name,raw,mime)
-       except Exception: pass
+       storage_path=itemid+'/'+fid+'/'+name
+       supabase_upload('course-files',storage_path,raw,mime)
+       file_path='supabase:'+storage_path
+      else:(DATA/'files'/fid).write_bytes(raw)
+      attachment={'id':fid,'name':name,'mime':mime,'size':len(raw),'path':file_path}
+      p['_attachments']=[*p.get('_attachments',[]),attachment]
+      if supabase_configured():cloud_state.save_content(itemid,row['kind'],row['title'],row['category'],row['status'],p)
+      c.execute('INSERT INTO uploads VALUES(?,?,?,?,?,?)',(fid,itemid,name,mime,len(raw),file_path))
+      c.execute('UPDATE items SET payload=?,updated=? WHERE id=?',(json.dumps(p),now,itemid))
+      return self.reply({'ok':True,'id':fid})
+     if path=='/api/admin/upload-remove':
+      fid=clean(data.get('id'),120);itemid=clean(data.get('item_id'),120)
+      file=c.execute('SELECT * FROM uploads WHERE id=? AND item_id=?',(fid,itemid)).fetchone()
+      if not file:raise ValueError('Fichier introuvable.')
+      row=c.execute('SELECT * FROM items WHERE id=?',(itemid,)).fetchone();p=json.loads(row['payload'])
+      p['_attachments']=[f for f in p.get('_attachments',[]) if f['id']!=fid]
+      if supabase_configured():cloud_state.save_content(itemid,row['kind'],row['title'],row['category'],row['status'],p)
+      c.execute('DELETE FROM uploads WHERE id=?',(fid,))
+      c.execute('UPDATE items SET payload=?,updated=? WHERE id=?',(json.dumps(p),now,itemid))
       return self.reply({'ok':True})
      if path=='/api/admin/message':c.execute('UPDATE messages SET status=? WHERE id=?',('processed',clean(data.get('id'),120)));return self.reply({'ok':True})
      if path=='/api/admin/newsletter-delete':c.execute('DELETE FROM newsletter WHERE email=?',(email(data.get('email')),));return self.reply({'ok':True})
     if path=='/api/order':
+     delivery={k:clean(data.get(k),n) for k,n in [('last_name',100),('first_name',100),('phone',40),('address',1000)]}
+     if not all(delivery.values()):raise ValueError('Complétez votre nom, vos prénoms, votre téléphone et votre adresse de livraison.')
+     if not re.fullmatch(r'[+0-9(). /-]{6,40}',delivery['phone']) or len(re.sub(r'\D','',delivery['phone']))<6:raise ValueError('Indiquez un numéro de téléphone valide.')
+     request_id=clean(data.get('request_id'),80)
+     if not re.fullmatch(r'[a-zA-Z0-9-]{16,80}',request_id):raise ValueError('Identifiant de commande invalide. Rouvrez le formulaire.')
+     oid=str(uuid.uuid5(uuid.NAMESPACE_URL,'lex-associes:order:'+uid+':'+request_id))
+     if cloud_state.enabled():cloud_state.sync_orders(c)
+     if c.execute('SELECT 1 FROM orders WHERE id=? AND user_id=?',(oid,uid)).fetchone():
+      c.execute('DELETE FROM cart WHERE user_id=?',(uid,))
+      return self.reply({'ok':True,'id':oid,'message':'Votre commande a été transmise à notre équipe.'})
      rows=list(c.execute("SELECT items.*,cart.quantity FROM cart JOIN items ON items.id=cart.item_id WHERE cart.user_id=? AND items.status='published'",(uid,)))
      if not rows:raise ValueError('Votre panier est vide.')
      lines=[];total=0
@@ -372,12 +428,10 @@ class App(SimpleHTTPRequestHandler):
       p=pack(r);price=p.get('price')
       if not p.get('purchasable') or p.get('demo') or not isinstance(price,int) or price<=0:raise ValueError('Un article ne peut pas être commandé.')
       lines.append({'id':r['id'],'title':r['title'],'price':price,'quantity':r['quantity']});total+=price*r['quantity']
-     oid=secrets.token_hex(12); line_json=json.dumps(lines,ensure_ascii=False); c.execute('INSERT INTO orders VALUES(?,?,?,?,?,?)',(oid,uid,'pending_payment',total,line_json,now));c.execute('DELETE FROM cart WHERE user_id=?',(uid,))
-     if supabase_configured():
-      try:
-       remote_id=str(uuid.uuid5(uuid.NAMESPACE_URL,'lex-associes:order:'+oid)); supabase_request('/rest/v1/orders','POST',{'id':remote_id,'user_id':None,'status':'pending_payment','total':total,'lines':lines},None)
-      except Exception: pass
-     return self.reply({'ok':True,'id':oid,'message':'Commande enregistrée en attente de paiement. Aucun débit ni accès payant accordé.'})
+     if supabase_configured():cloud_state.save_order(oid,u,total,lines,delivery)
+     c.execute('INSERT INTO orders(id,user_id,status,total,lines,created,delivery) VALUES(?,?,?,?,?,?,?)',(oid,uid,'pending',total,json.dumps(lines),now,json.dumps(delivery)))
+     c.execute('DELETE FROM cart WHERE user_id=?',(uid,))
+     return self.reply({'ok':True,'id':oid,'message':'Votre commande a été transmise à notre équipe.'})
     itemid=clean(data.get('id'),120);r=c.execute("SELECT * FROM items WHERE id=? AND status='published'",(itemid,)).fetchone()
     if not r:raise ValueError('Contenu introuvable.')
     p=pack(r,True)
@@ -395,6 +449,7 @@ class App(SimpleHTTPRequestHandler):
      if data.get('remove'):c.execute('DELETE FROM cart WHERE user_id=? AND item_id=?',(uid,itemid))
      else:
       if not p.get('purchasable') or p.get('demo') or not isinstance(p.get('price'),int) or p['price']<=0:raise ValueError('Cet article n’est pas encore disponible à l’achat.')
+      if c.execute('SELECT count(*) FROM cart WHERE user_id=?',(uid,)).fetchone()[0]>=20 and not c.execute('SELECT 1 FROM cart WHERE user_id=? AND item_id=?',(uid,itemid)).fetchone():raise ValueError('20 articles différents maximum par commande.')
       q=max(1,min(10,int(data.get('quantity',1))));c.execute('INSERT INTO cart VALUES(?,?,?) ON CONFLICT(user_id,item_id) DO UPDATE SET quantity=excluded.quantity',(uid,itemid,q))
     elif path=='/api/enroll':
      if p['kind']!='formation' or p.get('price')!=0 or not p.get('modules'):raise ValueError('L’inscription gratuite n’est pas disponible pour cette formation.')

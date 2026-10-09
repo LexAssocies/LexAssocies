@@ -54,8 +54,8 @@ try:
  req(b,'file/'+fid,expected=403)
  assert req(a,'file/'+fid)==b'private-file'
  req(b,'cart',{'id':'paid-qa','quantity':2})
- order=req(b,'order',{'total':1})
- orders=req(b,'account')['orders'];assert orders[0]['total']==2000 and orders[0]['status']=='pending_payment'
+ order=req(b,'order',{'total':1,'last_name':'Client','first_name':'Test','phone':'+225 0700000000','address':'Abidjan, quartier test','request_id':'test-order-request-123'})
+ orders=req(b,'account')['orders'];assert orders[0]['total']==2000 and orders[0]['status']=='pending'
  req(b,'file/'+fid,expected=403)
  req(b,'order',{},400)
  req(anon,'contact',{'name':'QA','email':'contact@example.test','subject':'Test','message':'Message local'})
