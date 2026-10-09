@@ -13,6 +13,7 @@ def _load_env():
 _load_env()
 SUPABASE_URL = os.environ.get('SUPABASE_URL', '').rstrip('/')
 SUPABASE_KEY = os.environ.get('SUPABASE_PUBLISHABLE_KEY', '')
+SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SECRET_KEY', '')
 
 def configured():
     return bool(SUPABASE_URL and SUPABASE_KEY)
@@ -20,7 +21,8 @@ def configured():
 def request(path, method='GET', payload=None, token=None):
     if not configured():
         raise RuntimeError('Supabase non configuré')
-    headers = {'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + (token or SUPABASE_KEY)}
+    active_key = token or SUPABASE_SERVICE_KEY or SUPABASE_KEY
+    headers = {'apikey': active_key, 'Authorization': 'Bearer ' + active_key}
     data = None
     if payload is not None:
         data = json.dumps(payload).encode('utf-8')
