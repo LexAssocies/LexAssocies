@@ -13,12 +13,13 @@ from security import STAFF, initialize_security, suspended, audit, get_security,
 from admin_support import initialize_admin, admin_get, admin_post, track_visit, validate_content
 import seo
 try:
- from supabase_client import configured as supabase_configured, request as supabase_request, upload_file as supabase_upload, auth_login as supabase_auth_login
+ from supabase_client import configured as supabase_configured, request as supabase_request, upload_file as supabase_upload, auth_login as supabase_auth_login, auth_user as supabase_auth_user
 except Exception:
  supabase_configured=lambda: False
  supabase_request=lambda *a,**k: []
  supabase_upload=lambda *a,**k: None
  supabase_auth_login=lambda *a,**k: None
+ supabase_auth_user=lambda *a,**k: None
 def db():
  c=sqlite3.connect(DATA/'lex.sqlite',timeout=15);c.row_factory=sqlite3.Row;c.execute('PRAGMA foreign_keys=ON');return c
 def initialize():
@@ -90,12 +91,26 @@ class App(SimpleHTTPRequestHandler):
     self.audit_actor=None
    self.transaction.commit();self.transaction=None
   raw=json.dumps(data,ensure_ascii=False).encode();self.send_response(status);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Length',str(len(raw)));self.send_header('Cache-Control','no-store');self.headers_security()
-  if cookie:self.send_header('Set-Cookie',cookie)
+  if cookie:
+   for value in (cookie if isinstance(cookie,(list,tuple)) else [cookie]): self.send_header('Set-Cookie',value)
   self.end_headers();self.wfile.write(raw)
  def identity(self,c):
   cookie=self.headers.get('Cookie','');match=re.search(r'(?:^|;\s*)lex_session=([a-f0-9]{64})(?:;|$)',cookie)
-  if not match:return None
-  return c.execute('SELECT users.* FROM users JOIN sessions ON sessions.user_id=users.id WHERE token=? AND expires>? AND NOT EXISTS(SELECT 1 FROM user_security WHERE user_id=users.id AND suspended=1)',(hashlib.sha256(match[1].encode()).hexdigest(),time.time())).fetchone()
+  if match:
+   found=c.execute('SELECT users.* FROM users JOIN sessions ON sessions.user_id=users.id WHERE token=? AND expires>? AND NOT EXISTS(SELECT 1 FROM user_security WHERE user_id=users.id AND suspended=1)',(hashlib.sha256(match[1].encode()).hexdigest(),time.time())).fetchone()
+   if found:return found
+  sm=re.search(r'(?:^|;\s*)lex_supabase=([^;]+)',cookie)
+  if sm and supabase_configured():
+   try:
+    remote=supabase_auth_user(sm.group(1)); mail=remote.get('email');
+     if mail:
+      found=c.execute('SELECT * FROM users WHERE email=?',(mail,)).fetchone()
+      if found:return found
+      prof=(supabase_request('/rest/v1/profiles?select=name,role,suspended&limit=1') or [])
+      if not prof or not prof[0].get('suspended'):
+       rid=secrets.token_hex(12); c.execute('INSERT OR IGNORE INTO users VALUES(?,?,?,?,?,?)',(rid,prof[0].get('name') if prof else mail.split('@')[0],mail,password(secrets.token_urlsafe(24)),prof[0].get('role','member') if prof else 'member',time.time())); return c.execute('SELECT * FROM users WHERE email=?',(mail,)).fetchone()
+   except Exception: pass
+  return None
  def need(self,c,admin=False):
   u=self.identity(c)
   if not u:raise PermissionError('Connectez-vous pour continuer.')
@@ -230,16 +245,19 @@ class App(SimpleHTTPRequestHandler):
       except sqlite3.IntegrityError:raise ValueError('Cette adresse est déjà utilisée. Connectez-vous.')
      u=c.execute('SELECT * FROM users WHERE email=?',(mail,)).fetchone()
      local_ok=bool(u and not suspended(c,u['id']) and hmac.compare_digest(password(pw,u['password'].split(':')[0]),u['password']))
+     remote_token=None
      if not local_ok and path=='/api/login' and supabase_configured():
       try:
-       remote=supabase_auth_login(mail,pw); profile=(supabase_request('/rest/v1/profiles?select=id,name,role,suspended&id=eq.'+remote['user']['id']) or [])
+       remote=supabase_auth_login(mail,pw); remote_token=remote.get('access_token'); profile=(supabase_request('/rest/v1/profiles?select=id,name,role,suspended&id=eq.'+remote['user']['id']) or [])
        if remote.get('user') and not u:
         rid=secrets.token_hex(12); name=(profile[0].get('name') if profile else '') or mail.split('@')[0]
         role=(profile[0].get('role') if profile else 'member') or 'member'
         c.execute('INSERT INTO users VALUES(?,?,?,?,?,?)',(rid,name,mail,password(secrets.token_urlsafe(24)),role,now));u=c.execute('SELECT * FROM users WHERE id=?',(rid,)).fetchone();local_ok=True
       except Exception: pass
      if not local_ok:raise ValueError('E-mail ou mot de passe incorrect.')
-     token=secrets.token_hex(32);c.execute('DELETE FROM sessions WHERE expires<?',(now,));c.execute('INSERT INTO sessions VALUES(?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),u['id'],now+86400*7));return self.reply({'ok':True},cookie=f'lex_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800')
+     token=secrets.token_hex(32);c.execute('DELETE FROM sessions WHERE expires<?',(now,));c.execute('INSERT INTO sessions VALUES(?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),u['id'],now+86400*7));cookies=[f'lex_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800']
+     if remote_token: cookies.append(f'lex_supabase={remote_token}; Secure; SameSite=Lax; Path=/; Max-Age=604800')
+     return self.reply({'ok':True},cookie=cookies)
     if path=='/api/logout':
      u=self.identity(c)
      cookie=self.headers.get('Cookie','');match=re.search(r'lex_session=([a-f0-9]{64})',cookie)

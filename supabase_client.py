@@ -55,3 +55,6 @@ def auth_login(email, password):
       headers={'apikey':active_key,'Authorization':'Bearer '+active_key,'Content-Type':'application/json'})
     with urllib.request.urlopen(req,timeout=12) as response:
       return json.loads(response.read())
+
+def auth_user(token):
+    return request('/auth/v1/user', token=token)
