@@ -104,6 +104,10 @@ class App(SimpleHTTPRequestHandler):
  def allowed_host(self):
   host=self.headers.get('Host','').split(':')[0].lower()
   return host in ('localhost','127.0.0.1') or bool(os.environ.get('VERCEL'))
+ def allowed_origin(self):
+  origin=self.headers.get('Origin','')
+  if origin in (f'http://localhost:{PORT}',f'http://127.0.0.1:{PORT}'): return True
+  return bool(os.environ.get('VERCEL')) and origin.startswith('https://')
  def do_GET(self):
   if not self.allowed_host():return self.reply({'error':'Hôte non autorisé.'},403)
   path=urlparse(self.path).path
@@ -194,7 +198,7 @@ class App(SimpleHTTPRequestHandler):
   if robots:self.send_header('X-Robots-Tag',robots)
   self.end_headers();self.wfile.write(raw)
  def do_POST(self):
-  if not self.allowed_host() or self.headers.get('Origin') not in (f'http://localhost:{PORT}',f'http://127.0.0.1:{PORT}'):
+  if not self.allowed_host() or not self.allowed_origin():
    return self.reply({'error':'Origine non autorisée.'},403)
   try:
    length=int(self.headers.get('Content-Length','0'))
