@@ -32,7 +32,7 @@ def validate_content(p):
 
 def admin_post(c,path,data,uid,now):
  if path=='/api/admin/archive':
-  status='draft' if data.get('restore') else 'archived'
+  status='published' if data.get('restore') else 'archived'
   changed=c.execute('UPDATE items SET status=?,updated=? WHERE id=?',(status,now,str(data.get('id','')))).rowcount
   if not changed:raise ValueError('Contenu introuvable.')
   return {'ok':True}
