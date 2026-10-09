@@ -101,7 +101,9 @@ class App(SimpleHTTPRequestHandler):
   if not u:raise PermissionError('Connectez-vous pour continuer.')
   if admin and u['role'] not in STAFF:raise PermissionError('Accès réservé à l’administration.')
   return u
- def allowed_host(self):return self.headers.get('Host') in (f'localhost:{PORT}',f'127.0.0.1:{PORT}')
+ def allowed_host(self):
+  host=self.headers.get('Host','').split(':')[0].lower()
+  return host in ('localhost','127.0.0.1') or bool(os.environ.get('VERCEL'))
  def do_GET(self):
   if not self.allowed_host():return self.reply({'error':'Hôte non autorisé.'},403)
   path=urlparse(self.path).path
