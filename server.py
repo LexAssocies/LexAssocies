@@ -128,7 +128,10 @@ class App(SimpleHTTPRequestHandler):
      # la migration : la base locale validée par le cabinet. Supabase est une
      # sauvegarde et ne doit pas injecter de doublons dans le catalogue.
      items=[pack(r) for r in c.execute("SELECT * FROM items WHERE status='published' ORDER BY updated DESC")]
-     return self.reply({'items':items,'user':{k:u[k] for k in ('id','name','email','role')} if u else None,'setup':not c.execute("SELECT 1 FROM users WHERE role='owner'").fetchone(),'payments':False})
+     # En production, Supabase Auth contient déjà le compte principal ;
+     # ne jamais afficher l'assistant de première installation sur Vercel.
+     setup=(not c.execute("SELECT 1 FROM users WHERE role='owner'").fetchone()) and not supabase_configured()
+     return self.reply({'items':items,'user':{k:u[k] for k in ('id','name','email','role')} if u else None,'setup':setup,'payments':False})
     if path.startswith('/api/item/'):
      itemid=unquote(path.split('/')[-1]);r=c.execute('SELECT * FROM items WHERE id=?',(itemid,)).fetchone()
      if not r or (r['status']!='published' and (not u or u['role'] not in STAFF)):return self.reply({'error':'Contenu introuvable.'},404)
