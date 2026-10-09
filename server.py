@@ -1,5 +1,5 @@
 """LEX ASSOCIÉS local platform. Run python server.py; binds to loopback only."""
-import base64, hashlib, hmac, json, mimetypes, os, re, secrets, sqlite3, time
+import base64, hashlib, hmac, json, mimetypes, os, re, secrets, sqlite3, time, uuid
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs, unquote
@@ -63,7 +63,7 @@ def remote_items():
   out=[]
   for row in rows:
    p=row.get('payload') if isinstance(row.get('payload'),dict) else {}
-   p.update(id=row.get('id'),kind=row.get('kind'),title=row.get('title'),category=row.get('category',''),status=row.get('status','published'))
+   p.update(id=p.get('_local_id') or row.get('id'),kind=row.get('kind'),title=row.get('title'),category=row.get('category',''),status=row.get('status','published'))
    out.append(p)
   return out
  except Exception:
@@ -266,6 +266,11 @@ class App(SimpleHTTPRequestHandler):
        m['id']=m.get('id') or f'module-{i+1}'
        if m.get('video') and not str(m['video']).startswith('https://'):raise ValueError('La vidéo doit utiliser une adresse HTTPS.')
       c.execute('INSERT INTO items VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,title=excluded.title,category=excluded.category,status=excluded.status,payload=excluded.payload,updated=excluded.updated',(itemid,kind,title,clean(p.get('category'),120),status,json.dumps(p,ensure_ascii=False),now))
+      if supabase_configured():
+       try:
+        remote_id=str(uuid.uuid5(uuid.NAMESPACE_URL,'lex-associes:'+itemid)); remote=dict(p); remote['_local_id']=itemid
+        supabase_request('/rest/v1/contents?on_conflict=id','POST',{'id':remote_id,'kind':kind,'title':title,'category':clean(p.get('category'),120),'status':status,'payload':remote},None)
+       except Exception: pass
       return self.reply({'ok':True,'id':itemid})
      if path=='/api/admin/upload':
       itemid=clean(data.get('item_id'),120)

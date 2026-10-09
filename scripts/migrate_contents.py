@@ -14,8 +14,9 @@ if not url or not key:
 db=sqlite3.connect(root/'data'/'lex.sqlite'); db.row_factory=sqlite3.Row
 rows=[]
 for r in db.execute("select id,kind,title,category,status,payload,updated from items"):
+ payload=json.loads(r['payload']); payload['_local_id']=r['id']
  rows.append({'id':str(uuid.uuid5(uuid.NAMESPACE_URL,'lex-associes:'+r['id'])),'kind':r['kind'],'title':r['title'],'category':r['category'] or '',
-              'status':r['status'],'payload':json.loads(r['payload'])})
+              'status':r['status'],'payload':payload})
 if not rows:
  print('Aucun contenu local à transférer.'); raise SystemExit(0)
 req=Request(url+'/rest/v1/contents?on_conflict=id',data=json.dumps(rows,ensure_ascii=False).encode(),method='POST',headers={
