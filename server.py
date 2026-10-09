@@ -12,6 +12,11 @@ PORT=int(os.environ.get('LEX_PORT','4180'))
 from security import STAFF, initialize_security, suspended, audit, get_security, account_action, recover
 from admin_support import initialize_admin, admin_get, admin_post, track_visit, validate_content
 import seo
+try:
+ from supabase_client import configured as supabase_configured, request as supabase_request
+except Exception:
+ supabase_configured=lambda: False
+ supabase_request=lambda *a,**k: []
 def db():
  c=sqlite3.connect(DATA/'lex.sqlite',timeout=15);c.row_factory=sqlite3.Row;c.execute('PRAGMA foreign_keys=ON');return c
 def initialize():
@@ -50,6 +55,19 @@ def pack(row,full=False):
   for m in p.get('modules',[]):
    m.pop('body',None);m.pop('video',None);m.pop('quiz',None);m.pop('exercise',None);m.pop('correction',None)
  return p
+def remote_items():
+ """Read published content from Supabase when it has been populated."""
+ if not supabase_configured(): return []
+ try:
+  rows=supabase_request('/rest/v1/contents?select=id,kind,title,category,status,payload,updated_at&status=eq.published&order=updated_at.desc') or []
+  out=[]
+  for row in rows:
+   p=row.get('payload') if isinstance(row.get('payload'),dict) else {}
+   p.update(id=row.get('id'),kind=row.get('kind'),title=row.get('title'),category=row.get('category',''),status=row.get('status','published'))
+   out.append(p)
+  return out
+ except Exception:
+  return []
 def password(value,salt=None):
  salt=salt or secrets.token_hex(16)
  return salt+':'+hashlib.pbkdf2_hmac('sha256',value.encode(),bytes.fromhex(salt),600000).hex()
@@ -102,7 +120,7 @@ class App(SimpleHTTPRequestHandler):
    with db() as c:
     u=self.identity(c)
     if path=='/api/bootstrap':
-     items=[pack(r) for r in c.execute("SELECT * FROM items WHERE status='published' ORDER BY updated DESC")]
+     items=remote_items() or [pack(r) for r in c.execute("SELECT * FROM items WHERE status='published' ORDER BY updated DESC")]
      return self.reply({'items':items,'user':{k:u[k] for k in ('id','name','email','role')} if u else None,'setup':not c.execute("SELECT 1 FROM users WHERE role='owner'").fetchone(),'payments':False})
     if path.startswith('/api/item/'):
      itemid=unquote(path.split('/')[-1]);r=c.execute('SELECT * FROM items WHERE id=?',(itemid,)).fetchone()
