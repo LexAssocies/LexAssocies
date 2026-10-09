@@ -229,10 +229,20 @@ class App(SimpleHTTPRequestHandler):
     if path=='/api/contact':
      name=clean(data.get('name'),160);body=clean(data.get('message'));mail=email(data.get('email'))
      if not name or not body:raise ValueError('Complétez votre nom et votre message.')
-     c.execute('INSERT INTO messages(id,name,email,phone,subject,body,created) VALUES(?,?,?,?,?,?,?)',(secrets.token_hex(12),name,mail,clean(data.get('phone'),40),clean(data.get('subject'),160),body,now));return self.reply({'ok':True,'message':'Votre demande est enregistrée et consultable par le cabinet dans son administration.'})
+     mid=secrets.token_hex(12); phone=clean(data.get('phone'),40); subject=clean(data.get('subject'),160)
+     c.execute('INSERT INTO messages(id,name,email,phone,subject,body,created) VALUES(?,?,?,?,?,?,?)',(mid,name,mail,phone,subject,body,now))
+     if supabase_configured():
+      try: supabase_request('/rest/v1/messages','POST',{'name':name,'email':mail,'phone':phone,'subject':subject,'body':body},None)
+      except Exception: pass
+     return self.reply({'ok':True,'message':'Votre demande est enregistrée et consultable par le cabinet dans son administration.'})
     if path=='/api/newsletter':
      if not data.get('consent'):raise ValueError('Votre accord est nécessaire pour vous inscrire.')
-     c.execute('INSERT INTO newsletter VALUES(?,?,?,?) ON CONFLICT(email) DO UPDATE SET name=excluded.name,interests=excluded.interests',(email(data.get('email')),clean(data.get('name'),160),json.dumps(data.get('interests',[])),now));return self.reply({'ok':True,'message':'Votre inscription est enregistrée. Vous pourrez demander sa suppression au cabinet.'})
+     mail=email(data.get('email')); name=clean(data.get('name'),160); interests=json.dumps(data.get('interests',[]))
+     c.execute('INSERT INTO newsletter VALUES(?,?,?,?) ON CONFLICT(email) DO UPDATE SET name=excluded.name,interests=excluded.interests',(mail,name,interests,now))
+     if supabase_configured():
+      try: supabase_request('/rest/v1/newsletter?on_conflict=email','POST',{'email':mail,'name':name,'interests':interests},None)
+      except Exception: pass
+     return self.reply({'ok':True,'message':'Votre inscription est enregistrée. Vous pourrez demander sa suppression au cabinet.'})
     u=self.need(c);uid=u['id']
     if path.startswith('/api/security/'):
      result=account_action(c,path,data,u,password,email)
@@ -298,7 +308,12 @@ class App(SimpleHTTPRequestHandler):
       p=pack(r);price=p.get('price')
       if not p.get('purchasable') or p.get('demo') or not isinstance(price,int) or price<=0:raise ValueError('Un article ne peut pas être commandé.')
       lines.append({'id':r['id'],'title':r['title'],'price':price,'quantity':r['quantity']});total+=price*r['quantity']
-     oid=secrets.token_hex(12);c.execute('INSERT INTO orders VALUES(?,?,?,?,?,?)',(oid,uid,'pending_payment',total,json.dumps(lines,ensure_ascii=False),now));c.execute('DELETE FROM cart WHERE user_id=?',(uid,));return self.reply({'ok':True,'id':oid,'message':'Commande enregistrée en attente de paiement. Aucun débit ni accès payant accordé.'})
+     oid=secrets.token_hex(12); line_json=json.dumps(lines,ensure_ascii=False); c.execute('INSERT INTO orders VALUES(?,?,?,?,?,?)',(oid,uid,'pending_payment',total,line_json,now));c.execute('DELETE FROM cart WHERE user_id=?',(uid,))
+     if supabase_configured():
+      try:
+       remote_id=str(uuid.uuid5(uuid.NAMESPACE_URL,'lex-associes:order:'+oid)); supabase_request('/rest/v1/orders','POST',{'id':remote_id,'user_id':None,'status':'pending_payment','total':total,'lines':lines},None)
+      except Exception: pass
+     return self.reply({'ok':True,'id':oid,'message':'Commande enregistrée en attente de paiement. Aucun débit ni accès payant accordé.'})
     itemid=clean(data.get('id'),120);r=c.execute("SELECT * FROM items WHERE id=? AND status='published'",(itemid,)).fetchone()
     if not r:raise ValueError('Contenu introuvable.')
     p=pack(r,True)
