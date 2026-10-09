@@ -13,11 +13,12 @@ from security import STAFF, initialize_security, suspended, audit, get_security,
 from admin_support import initialize_admin, admin_get, admin_post, track_visit, validate_content
 import seo
 try:
- from supabase_client import configured as supabase_configured, request as supabase_request, upload_file as supabase_upload
+ from supabase_client import configured as supabase_configured, request as supabase_request, upload_file as supabase_upload, auth_login as supabase_auth_login
 except Exception:
  supabase_configured=lambda: False
  supabase_request=lambda *a,**k: []
  supabase_upload=lambda *a,**k: None
+ supabase_auth_login=lambda *a,**k: None
 def db():
  c=sqlite3.connect(DATA/'lex.sqlite',timeout=15);c.row_factory=sqlite3.Row;c.execute('PRAGMA foreign_keys=ON');return c
 def initialize():
@@ -219,7 +220,16 @@ class App(SimpleHTTPRequestHandler):
       try:c.execute('INSERT INTO users VALUES(?,?,?,?,?,?)',(secrets.token_hex(12),name,mail,password(pw),role,now))
       except sqlite3.IntegrityError:raise ValueError('Cette adresse est déjà utilisée. Connectez-vous.')
      u=c.execute('SELECT * FROM users WHERE email=?',(mail,)).fetchone()
-     if not u or suspended(c,u['id']) or not hmac.compare_digest(password(pw,u['password'].split(':')[0]),u['password']):raise ValueError('E-mail ou mot de passe incorrect.')
+     local_ok=bool(u and not suspended(c,u['id']) and hmac.compare_digest(password(pw,u['password'].split(':')[0]),u['password']))
+     if not local_ok and path=='/api/login' and supabase_configured():
+      try:
+       remote=supabase_auth_login(mail,pw); profile=(supabase_request('/rest/v1/profiles?select=id,name,role,suspended&id=eq.'+remote['user']['id']) or [])
+       if remote.get('user') and not u:
+        rid=secrets.token_hex(12); name=(profile[0].get('name') if profile else '') or mail.split('@')[0]
+        role=(profile[0].get('role') if profile else 'member') or 'member'
+        c.execute('INSERT INTO users VALUES(?,?,?,?,?,?)',(rid,name,mail,password(secrets.token_urlsafe(24)),role,now));u=c.execute('SELECT * FROM users WHERE id=?',(rid,)).fetchone();local_ok=True
+      except Exception: pass
+     if not local_ok:raise ValueError('E-mail ou mot de passe incorrect.')
      token=secrets.token_hex(32);c.execute('DELETE FROM sessions WHERE expires<?',(now,));c.execute('INSERT INTO sessions VALUES(?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),u['id'],now+86400*7));return self.reply({'ok':True},cookie=f'lex_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800')
     if path=='/api/logout':
      u=self.identity(c)
@@ -359,3 +369,4 @@ class App(SimpleHTTPRequestHandler):
 if __name__=='__main__':
  initialize();print(f'LEX ASSOCIÉS : http://localhost:{PORT}',flush=True)
  ThreadingHTTPServer(('127.0.0.1',PORT),App).serve_forever()
+

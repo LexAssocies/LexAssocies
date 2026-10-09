@@ -45,3 +45,13 @@ def upload_file(bucket, path, raw, mime='application/octet-stream'):
       'Content-Type':mime,'x-upsert':'true'})
     with urllib.request.urlopen(req,timeout=30) as response:
       return response.read()
+
+def auth_login(email, password):
+    """Authentifie un utilisateur via Supabase Auth."""
+    import urllib.request, json
+    active_key=SUPABASE_KEY
+    req=urllib.request.Request(SUPABASE_URL+'/auth/v1/token?grant_type=password',
+      data=json.dumps({'email':email,'password':password}).encode(), method='POST',
+      headers={'apikey':active_key,'Authorization':'Bearer '+active_key,'Content-Type':'application/json'})
+    with urllib.request.urlopen(req,timeout=12) as response:
+      return json.loads(response.read())
