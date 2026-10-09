@@ -2,4 +2,7 @@
 from server import initialize, App
 
 initialize()
-handler = App
+
+class handler(App):
+    """Gestionnaire HTTP explicite détecté par le runtime Vercel."""
+    pass
