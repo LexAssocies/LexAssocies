@@ -13,10 +13,11 @@ from security import STAFF, initialize_security, suspended, audit, get_security,
 from admin_support import initialize_admin, admin_get, admin_post, track_visit, validate_content
 import seo
 try:
- from supabase_client import configured as supabase_configured, request as supabase_request
+ from supabase_client import configured as supabase_configured, request as supabase_request, upload_file as supabase_upload
 except Exception:
  supabase_configured=lambda: False
  supabase_request=lambda *a,**k: []
+ supabase_upload=lambda *a,**k: None
 def db():
  c=sqlite3.connect(DATA/'lex.sqlite',timeout=15);c.row_factory=sqlite3.Row;c.execute('PRAGMA foreign_keys=ON');return c
 def initialize():
@@ -282,7 +283,11 @@ class App(SimpleHTTPRequestHandler):
       if Path(name).suffix.lower() not in ('.pdf','.docx','.xlsx','.pptx','.txt','.png','.jpg','.jpeg','.mp4'):raise ValueError('Format non pris en charge.')
       raw=base64.b64decode(data.get('content',''),validate=True)
       if len(raw)>10*1024*1024:raise ValueError('10 Mo maximum par fichier.')
-      fid=secrets.token_hex(20);(DATA/'files'/fid).write_bytes(raw);c.execute('INSERT INTO uploads VALUES(?,?,?,?,?,?)',(fid,itemid,name,mimetypes.guess_type(name)[0] or 'application/octet-stream',len(raw),fid));return self.reply({'ok':True})
+      fid=secrets.token_hex(20);(DATA/'files'/fid).write_bytes(raw);mime=mimetypes.guess_type(name)[0] or 'application/octet-stream';c.execute('INSERT INTO uploads VALUES(?,?,?,?,?,?)',(fid,itemid,name,mime,len(raw),fid));
+      if supabase_configured():
+       try: supabase_upload('course-files',itemid+'/'+name,raw,mime)
+       except Exception: pass
+      return self.reply({'ok':True})
      if path=='/api/admin/message':c.execute('UPDATE messages SET status=? WHERE id=?',('processed',clean(data.get('id'),120)));return self.reply({'ok':True})
      if path=='/api/admin/newsletter-delete':c.execute('DELETE FROM newsletter WHERE email=?',(email(data.get('email')),));return self.reply({'ok':True})
     if path=='/api/order':

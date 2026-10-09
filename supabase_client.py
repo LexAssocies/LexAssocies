@@ -34,3 +34,14 @@ def request(path, method='GET', payload=None, token=None):
 
 def health():
     return request('/rest/v1/contents?select=id&limit=1')
+
+def upload_file(bucket, path, raw, mime='application/octet-stream'):
+    if not configured():
+        raise RuntimeError('Supabase non configuré')
+    import urllib.request
+    active_key=SUPABASE_SERVICE_KEY or SUPABASE_KEY
+    req=urllib.request.Request(SUPABASE_URL+'/storage/v1/object/'+bucket+'/'+path,
+      data=raw, method='POST', headers={'apikey':active_key,'Authorization':'Bearer '+active_key,
+      'Content-Type':mime,'x-upsert':'true'})
+    with urllib.request.urlopen(req,timeout=30) as response:
+      return response.read()
