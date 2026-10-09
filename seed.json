@@ -1,0 +1,306 @@
+[
+  {
+    "id": "voies-execution-ohada",
+    "kind": "formation",
+    "title": "Maîtriser les voies d’exécution OHADA",
+    "category": "Voies d’exécution",
+    "description": "Formation pratique destinée à comprendre et maîtriser les principales procédures de voies d’exécution prévues par le droit OHADA.",
+    "level": "Intermédiaire / Avancé",
+    "duration": "12 heures",
+    "format": "Vidéo + supports + cas pratiques",
+    "audience": "Professionnels",
+    "language": "Français",
+    "accessDuration": "12 mois",
+    "attestation": true,
+    "cases": true,
+    "models": true,
+    "featured": true,
+    "trainer": "À confirmer",
+    "price": null,
+    "demo": true,
+    "image": "assets/justice-hero.png",
+    "modules": [
+      {
+        "id": "module-1",
+        "title": "Introduction aux voies d’exécution",
+        "body": ""
+      },
+      {
+        "id": "module-2",
+        "title": "Conditions générales de l’exécution forcée",
+        "body": ""
+      },
+      {
+        "id": "module-3",
+        "title": "Saisie-attribution",
+        "body": ""
+      },
+      {
+        "id": "module-4",
+        "title": "Saisie conservatoire",
+        "body": ""
+      },
+      {
+        "id": "module-5",
+        "title": "Saisie-vente",
+        "body": ""
+      },
+      {
+        "id": "module-6",
+        "title": "Saisie immobilière",
+        "body": ""
+      },
+      {
+        "id": "module-7",
+        "title": "Contestations et incidents",
+        "body": ""
+      },
+      {
+        "id": "module-8",
+        "title": "Cas pratiques et rédaction des actes",
+        "body": ""
+      }
+    ]
+  },
+  {
+    "id": "decouvrir-plateforme",
+    "kind": "formation",
+    "title": "Prendre en main votre espace de formation",
+    "category": "Méthodologie juridique",
+    "description": "Un parcours gratuit de découverte pour explorer les modules, les exercices et le suivi de progression.",
+    "level": "Débutant",
+    "duration": "10 minutes",
+    "format": "Lecture + quiz",
+    "audience": "Tous publics",
+    "language": "Français",
+    "price": 0,
+    "trainer": "LEX ASSOCIÉS",
+    "featured": true,
+    "demo": true,
+    "attestation": false,
+    "image": "assets/formation.jpg",
+    "modules": [
+      {
+        "id": "premiers-pas",
+        "title": "Organiser son apprentissage",
+        "body": "Avant de commencer un parcours, prenez connaissance de ses objectifs et de son programme. Identifiez les compétences que vous souhaitez développer.\n\nPrévoyez un créneau régulier et conservez vos notes au même endroit. Chaque module peut regrouper une vidéo, des supports, un cas pratique, un quiz et des exercices.\n\nVotre progression est enregistrée dans votre compte lorsque vous validez un module. Le quiz permet de vérifier la compréhension du contenu.",
+        "exercise": "Notez un objectif personnel d’apprentissage et le temps que vous pouvez y consacrer chaque semaine.",
+        "quiz": [
+          {
+            "question": "Quelle action permet de retrouver votre avancement ?",
+            "options": [
+              "Valider les modules depuis votre compte",
+              "Fermer simplement la page",
+              "Changer de navigateur"
+            ],
+            "correct": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "bail-professionnel",
+    "kind": "formation",
+    "title": "Maîtriser le bail à usage professionnel",
+    "category": "Droit immobilier",
+    "description": "Comprendre les étapes du bail professionnel et les enjeux de sa pratique.",
+    "level": "Intermédiaire",
+    "duration": "À préciser",
+    "format": "Cours + cas pratiques",
+    "audience": "Professionnels",
+    "language": "Français",
+    "trainer": "À confirmer",
+    "price": null,
+    "demo": true,
+    "featured": true,
+    "image": "assets/justice-hero.png",
+    "modules": [
+      {
+        "id": "bail-1",
+        "title": "Repères et méthode d’analyse",
+        "body": ""
+      }
+    ]
+  },
+  {
+    "id": "mise-en-demeure",
+    "kind": "document",
+    "title": "Modèle de mise en demeure",
+    "category": "Actes juridiques",
+    "domain": "Recouvrement",
+    "description": "Modèle professionnel personnalisable.",
+    "body": "Le document sera accompagné d’un guide d’utilisation et d’instructions d’adaptation.",
+    "format": "Word",
+    "pages": null,
+    "price": null,
+    "demo": true,
+    "features": [
+      "Document modifiable",
+      "Guide d’utilisation",
+      "Instructions d’adaptation",
+      "Version téléchargeable"
+    ]
+  },
+  {
+    "id": "contrat-prestation",
+    "kind": "document",
+    "title": "Contrat de prestation de services",
+    "category": "Contrats",
+    "domain": "Droit des contrats",
+    "description": "Un support destiné à structurer les engagements d’une prestation.",
+    "price": null,
+    "demo": true,
+    "format": "Word"
+  },
+  {
+    "id": "guide-kyc",
+    "kind": "document",
+    "title": "Check-list de connaissance du client",
+    "category": "Conformité",
+    "domain": "LBC/FT et conformité",
+    "description": "Repères pour organiser la collecte des informations et le suivi du dossier.",
+    "price": null,
+    "demo": true,
+    "format": "PDF"
+  },
+  {
+    "id": "bibliotheque-ohada",
+    "kind": "resource",
+    "title": "Actes uniformes OHADA",
+    "category": "OHADA",
+    "domain": "Droit OHADA",
+    "description": "Espace documentaire consacré aux actes uniformes, à leurs commentaires et à la jurisprudence associée.",
+    "body": "Les textes et références vérifiés seront déposés par l’équipe éditoriale.",
+    "price": 0,
+    "demo": true
+  },
+  {
+    "id": "ouvrages-juridiques",
+    "kind": "resource",
+    "title": "Ouvrages de pratique juridique",
+    "category": "Ouvrages",
+    "description": "Les ouvrages et publications du cabinet réunis dans votre bibliothèque.",
+    "price": null,
+    "demo": true
+  },
+  {
+    "id": "methodologie-recherche",
+    "kind": "article",
+    "title": "Organiser sa recherche juridique",
+    "category": "Vie universitaire",
+    "description": "Une démarche de travail pour formuler sa question, identifier ses sources et organiser ses notes.",
+    "author": "Équipe éditoriale LEX ASSOCIÉS",
+    "reading": "4 min",
+    "demo": true,
+    "image": "assets/formation.jpg",
+    "body": "Une recherche commence par une question précise. Avant de rassembler des documents, délimitez le sujet, les notions à explorer et le type de réponse attendu.\n\nDistinguez les sources consultées et conservez leurs références. Relevez la date, l’auteur et le contexte de chaque document pour pouvoir revenir à la source.\n\nOrganisez vos notes autour des questions soulevées. Une synthèse utile fait apparaître ce qui est compris, ce qui reste à vérifier et les pistes à approfondir.",
+    "related": [
+      "decouvrir-plateforme",
+      "bibliotheque-ohada"
+    ]
+  },
+  {
+    "id": "article-bail",
+    "kind": "article",
+    "title": "Comprendre le bail à usage professionnel en Côte d’Ivoire",
+    "category": "Droit immobilier",
+    "description": "Un dossier pour relier les textes, la pratique et les ressources de formation.",
+    "author": "À confirmer",
+    "demo": true,
+    "body": "Ce dossier est prévu dans la ligne éditoriale. Son contenu juridique et ses références seront publiés après validation par le cabinet.",
+    "related": [
+      "bail-professionnel",
+      "mise-en-demeure"
+    ]
+  },
+  {
+    "id": "article-saisie",
+    "kind": "article",
+    "title": "Comprendre la saisie-attribution",
+    "category": "Voies d’exécution",
+    "description": "Du décryptage au parcours de formation, explorez les ressources associées.",
+    "author": "À confirmer",
+    "demo": true,
+    "body": "Le dossier complet, les textes cités et la jurisprudence seront ajoutés par l’équipe éditoriale.",
+    "related": [
+      "voies-execution-ohada",
+      "bibliotheque-ohada"
+    ]
+  },
+  {
+    "id": "live-pratique",
+    "kind": "live",
+    "title": "Regards sur la pratique du droit",
+    "category": "Capsules juridiques",
+    "description": "Vidéos, entretiens et échanges avec les professionnels du droit.",
+    "demo": true
+  },
+  {
+    "id": "webinaire-ohada",
+    "kind": "event",
+    "title": "Rencontre autour de la pratique OHADA",
+    "category": "Webinaires",
+    "description": "Une rencontre pour échanger sur les enjeux de la pratique professionnelle.",
+    "date": "",
+    "time": "",
+    "location": "En ligne",
+    "trainer": "À confirmer",
+    "price": null,
+    "demo": true
+  },
+  {
+    "id": "veille-ohada",
+    "kind": "watch",
+    "title": "Veille OHADA",
+    "category": "Actualités OHADA",
+    "description": "Suivez les textes, les décisions et les réformes sélectionnés par l’équipe.",
+    "body": "Les premières références seront publiées après vérification éditoriale.",
+    "demo": true
+  },
+  {
+    "id": "offre-gratuit",
+    "kind": "plan",
+    "title": "Gratuit",
+    "category": "Abonnements",
+    "description": "Accès aux contenus gratuits.",
+    "price": 0,
+    "demo": true
+  },
+  {
+    "id": "offre-essentiel",
+    "kind": "plan",
+    "title": "Essentiel",
+    "category": "Abonnements",
+    "description": "Plus de ressources et réductions.",
+    "price": null,
+    "demo": true
+  },
+  {
+    "id": "offre-professionnel",
+    "kind": "plan",
+    "title": "Professionnel",
+    "category": "Abonnements",
+    "description": "Bibliothèque premium, formations et documents.",
+    "price": null,
+    "demo": true
+  },
+  {
+    "id": "offre-premium",
+    "kind": "plan",
+    "title": "Premium",
+    "category": "Abonnements",
+    "description": "Accès étendu aux formations et ressources.",
+    "price": null,
+    "demo": true
+  },
+  {
+    "id": "offre-entreprise",
+    "kind": "plan",
+    "title": "Entreprise",
+    "category": "Abonnements",
+    "description": "Comptes collaborateurs, formations collectives et bibliothèque professionnelle.",
+    "price": null,
+    "demo": true
+  }
+]

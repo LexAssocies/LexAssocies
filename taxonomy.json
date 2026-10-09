@@ -1,0 +1,112 @@
+{
+  "formations": [
+    "Toutes les formations",
+    "Formations à la une",
+    "Nouvelles formations",
+    "Formations gratuites",
+    "Parcours professionnels",
+    "Classes virtuelles",
+    "Webinaires",
+    "Masterclass",
+    "Domaines de formation"
+  ],
+  "boutique": [
+    "Tous les documents",
+    "Contrats",
+    "Actes juridiques",
+    "Actes judiciaires",
+    "Documents d’entreprise",
+    "Conformité",
+    "Guides pratiques"
+  ],
+  "bibliotheque": [
+    "Tous les documents",
+    "Textes juridiques",
+    "OHADA",
+    "Jurisprudence",
+    "Ouvrages",
+    "Articles scientifiques",
+    "Mémoires et travaux",
+    "Fiches de cours",
+    "Supports pédagogiques",
+    "Guides professionnels"
+  ],
+  "blog": [
+    "Tous les articles",
+    "Droit OHADA",
+    "Droit des affaires",
+    "Droit immobilier",
+    "Droit du travail",
+    "Contrats",
+    "Procédures",
+    "Recouvrement",
+    "Voies d’exécution",
+    "Fiscalité",
+    "LBC/FT",
+    "Droit numérique",
+    "Vie universitaire"
+  ],
+  "etudiants": [
+    "Fiches de cours",
+    "Fiches de révision",
+    "Méthodologie",
+    "Cas pratiques",
+    "Commentaires d’arrêt",
+    "Dissertation",
+    "Préparation aux examens",
+    "Ressources universitaires",
+    "Orientation professionnelle",
+    "Formations pour étudiants"
+  ],
+  "professionnels": [
+    "Avocats",
+    "Commissaires de Justice",
+    "Notaires",
+    "Juristes",
+    "Magistrats",
+    "Experts",
+    "Responsables juridiques",
+    "Responsables conformité",
+    "Entrepreneurs",
+    "Administrations"
+  ],
+  "entreprises": [
+    "Formation en entreprise",
+    "Formation des équipes",
+    "Droit du travail",
+    "Contrats",
+    "Gouvernance",
+    "Conformité",
+    "LBC/FT",
+    "Prévention des risques",
+    "Documentation juridique",
+    "Veille juridique",
+    "Demander un devis"
+  ],
+  "evenements": [
+    "Calendrier",
+    "Webinaires",
+    "Conférences",
+    "Masterclass",
+    "Classes virtuelles",
+    "Formations en présentiel",
+    "Événements passés",
+    "Replays"
+  ],
+  "apropos": [
+    "Qui sommes-nous ?",
+    "Notre mission",
+    "Notre vision",
+    "Nos valeurs",
+    "Notre équipe",
+    "Nos formateurs",
+    "Nos partenaires",
+    "Nos domaines d’expertise",
+    "Pourquoi LEX ASSOCIÉS ?"
+  ],
+  "contact": [
+    "Nous contacter",
+    "FAQ",
+    "Newsletter"
+  ]
+}
