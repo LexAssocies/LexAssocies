@@ -103,10 +103,10 @@ class App(SimpleHTTPRequestHandler):
   if sm and supabase_configured():
    try:
     remote=supabase_auth_user(sm.group(1)); mail=remote.get('email');
-     if mail:
+    if mail:
       found=c.execute('SELECT * FROM users WHERE email=?',(mail,)).fetchone()
       if found:return found
-      prof=(supabase_request('/rest/v1/profiles?select=name,role,suspended&limit=1') or [])
+      prof=(supabase_request('/rest/v1/profiles?select=name,role,suspended&id=eq.'+remote.get('id','')) or [])
       if not prof or not prof[0].get('suspended'):
        rid=secrets.token_hex(12); c.execute('INSERT OR IGNORE INTO users VALUES(?,?,?,?,?,?)',(rid,prof[0].get('name') if prof else mail.split('@')[0],mail,password(secrets.token_urlsafe(24)),prof[0].get('role','member') if prof else 'member',time.time())); return c.execute('SELECT * FROM users WHERE email=?',(mail,)).fetchone()
    except Exception: pass
