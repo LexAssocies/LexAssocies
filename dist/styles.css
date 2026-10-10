@@ -12,3 +12,5 @@
 .footer-bottom .site-credit{font-size:11px;text-align:center}
 .footer-bottom .site-credit a{display:inline;color:inherit;font-size:inherit;font-weight:600;text-decoration:underline;text-underline-offset:3px}
 .footer-bottom .site-credit a:hover{color:#ff8a00}
+
+.module-picker{margin:18px 0}.module-picker label{display:block;font-weight:600;margin-bottom:8px}.module-picker select{width:100%}.module-order button:disabled{opacity:.4;cursor:default}

@@ -58,5 +58,43 @@ editor=function(source){
  const save=f.onsubmit;f.onsubmit=async e=>{item.placements=$$('[name="placement"]:checked',f).map(el=>({section:el.dataset.section,category:el.dataset.category}));const b=f.querySelector('button:not([type])');b.disabled=true;try{await save(e);}finally{b.disabled=false;}};
  // Keep the save action after the page-placement choices.
  f.append(f.querySelector('.feedback').parentElement);
- const addControls=()=>{$$('.module-editor').forEach(el=>{if(el.querySelector('.module-order'))return;const row=document.createElement('div');row.className='module-order';row.innerHTML='<button type="button" class="text-link">Monter le module</button><button type="button" class="text-link">Descendre le module</button>';el.prepend(row);row.children[0].onclick=()=>{if(el.previousElementSibling)el.parentElement.insertBefore(el,el.previousElementSibling);};row.children[1].onclick=()=>{if(el.nextElementSibling)el.parentElement.insertBefore(el.nextElementSibling,el);};});};const add=$('#add-module').onclick;$('#add-module').onclick=()=>{add();addControls();};addControls();
+ compactModules(f);
 };
+
+// Keep all values in the form while showing only the selected module.
+function compactModules(form){
+ const box=$('#module-editors',form),addButton=$('#add-module',form);
+ const picker=document.createElement('div');picker.className='module-picker';
+ picker.innerHTML='<label for="module-choice">Module à modifier</label><select id="module-choice"></select><p class="tiny" role="status"></p>';
+ box.before(picker);
+ const choice=$('select',picker),summary=$('p',picker);
+ let active=null;
+ const modules=()=>$$('.module-editor',box);
+ function show(el){
+  active=el;modules().forEach(m=>m.hidden=m!==active);
+  choice.value=active?.dataset.id||'';
+ }
+ function update(preferred=active){
+  const list=modules();
+  choice.replaceChildren(...list.map((m,n)=>new Option('Module '+(n+1)+' — '+($('[name="mtitle"]',m).value.trim()||'Nouveau module'),m.dataset.id)));
+  picker.hidden=!list.length;
+  summary.textContent=list.length+' module'+(list.length>1?'s':'')+' · Un seul formulaire est affiché à la fois.';
+  show(list.includes(preferred)?preferred:list[0]||null);
+  list.forEach((m,n)=>{
+   let row=$('.module-order',m);
+   if(!row){row=document.createElement('div');row.className='module-order';row.innerHTML='<button type="button" class="text-link">Monter le module</button><button type="button" class="text-link">Descendre le module</button>';m.prepend(row);}
+   row.children[0].disabled=n===0;row.children[1].disabled=n===list.length-1;
+   row.children[0].onclick=()=>{if(m.previousElementSibling){box.insertBefore(m,m.previousElementSibling);update(m);}};
+   row.children[1].onclick=()=>{if(m.nextElementSibling){box.insertBefore(m.nextElementSibling,m);update(m);}};
+   $('.remove-module',m).onclick=()=>{m.remove();update(list[n+1]||list[n-1]);};
+  });
+ }
+ choice.onchange=()=>show(modules().find(m=>m.dataset.id===choice.value));
+ box.addEventListener('input',e=>{if(e.target.name==='mtitle')update();});
+ // Reveal an invalid hidden module before the browser focuses its required field.
+ form.addEventListener('invalid',e=>{const m=e.target.closest('.module-editor');if(m)show(m);},true);
+ const add=addButton.onclick;
+ addButton.onclick=()=>{add();const m=modules().at(-1);update(m);$('[name="mtitle"]',m).focus();};
+ if(!modules().length&&form.elements.kind.value==='formation')add();
+ update();
+}
