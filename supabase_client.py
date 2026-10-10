@@ -46,8 +46,32 @@ def upload_file(bucket, path, raw, mime='application/octet-stream'):
     req=urllib.request.Request(SUPABASE_URL+'/storage/v1/object/'+quote(bucket,safe='')+'/'+quote(path,safe='/'),
       data=raw, method='POST', headers={'apikey':active_key,'Authorization':'Bearer '+active_key,
       'Content-Type':mime,'x-upsert':'true'})
-    with urllib.request.urlopen(req,timeout=30) as response:
-      return response.read()
+    for attempt in range(2):
+      try:
+        with urllib.request.urlopen(req,timeout=30) as response:
+          return response.read()
+      except urllib.error.HTTPError as exc:
+        try: detail=json.loads(exc.read())
+        except (ValueError,UnicodeError): detail={}
+        code=str(detail.get('code') or detail.get('error') or '')
+        message=str(detail.get('message') or '').lower()
+        missing=code in ('NoSuchBucket','BucketNotFound') or 'bucket not found' in message
+        if missing and attempt==0 and bucket=='course-files' and SUPABASE_SERVICE_KEY:
+          try:
+            request('/storage/v1/bucket','POST',{'id':bucket,'name':bucket,'public':False,'file_size_limit':10485760})
+          except urllib.error.HTTPError as create_error:
+            # Another simultaneous upload may already have created it.
+            if create_error.code!=409:
+              raise ValueError('Le stockage des supports ne peut pas être initialisé. Vérifiez la configuration Supabase.') from None
+          continue
+        if missing:raise ValueError('Le stockage des supports est absent dans Supabase.') from None
+        if exc.code in (401,403) or code in ('AccessDenied','Unauthorized'):
+          raise ValueError('Supabase refuse le dépôt du fichier. Vérifiez la clé serveur et les droits du stockage.') from None
+        if code=='InvalidKey':raise ValueError('Le nom de stockage du fichier a été refusé.') from None
+        if exc.code==413 or code=='EntityTooLarge':raise ValueError('Le fichier dépasse la taille autorisée par le stockage.') from None
+        raise ValueError('Supabase n’a pas accepté le fichier (code '+str(exc.code)+'). Réessayez ou vérifiez les réglages du stockage.') from None
+      except (urllib.error.URLError,TimeoutError):
+        raise ValueError('Le stockage ne répond pas. Réessayez dans quelques instants.') from None
 
 def auth_login(email, password):
     """Authentifie un utilisateur via Supabase Auth."""

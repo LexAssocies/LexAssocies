@@ -38,6 +38,7 @@ class CloudWorkflow(unittest.TestCase):
             collection[payload['id']] = copy.deepcopy(payload)
             if collection is orders:collection[payload['id']]['created_at']='2026-10-09T00:00:00Z'
         def upload(bucket, path, raw, mime):
+            self.assertRegex(path,r'^attachments/[a-f0-9]{40}\.png$')
             storage[path] = raw
         with patch.dict(os.environ, {'VERCEL': '1', 'LEX_SESSION_SECRET': 'regression-secret'}), \
              patch.object(supabase_client, 'SUPABASE_SERVICE_KEY', 'test-server-key'), \
@@ -77,7 +78,7 @@ class CloudWorkflow(unittest.TestCase):
                 self.assertEqual(request('bootstrap')[0]['user']['role'], 'owner')
                 self.assertEqual(request('bootstrap')[0]['release'], server.RELEASE)
                 request('admin/unknown-file-action', {'id':'missing'}, 404)
-                item = {'id': 'cloud-training', 'kind': 'formation', 'title': 'Formation test', 'category': 'Général', 'status': 'published', 'price': 45000, 'modules': [], 'placements': []}
+                item = {'id': 'cloud-training', 'kind': 'formation', 'title': 'Formation test', 'category': 'GÃ©nÃ©ral', 'status': 'published', 'price': 45000, 'modules': [], 'placements': []}
                 request('admin/item', {'item': item})
                 self.assertEqual(len(request('admin')[0]['items']), 1)
                 self.assertEqual(request('bootstrap')[0]['items'][0]['price'], 45000)
@@ -99,8 +100,9 @@ class CloudWorkflow(unittest.TestCase):
                 self.assertEqual(len(catalogue), 1)
                 self.assertEqual(request('bootstrap')[0]['items'][0]['price'], 75000)
                 # Uploads remain downloadable after cold start, then detach reliably.
-                fid=request('admin/upload',{'item_id':item['id'],'name':'support.txt','content':base64.b64encode(b'private support').decode()})[0]['id']
+                fid=request('admin/upload',{'item_id':item['id'],'name':'Logo moderne LEX ASSOCIÉS en orange et turquoise (1).png','content':base64.b64encode(b'private support').decode()})[0]['id']
                 self.assertEqual(len(request('item/'+item['id'])[0]['files']),1)
+                self.assertEqual(request('item/'+item['id'])[0]['files'][0]['name'],'Logo moderne LEX ASSOCIÉS en orange et turquoise (1).png')
                 self.assertNotIn('_attachments',request('bootstrap')[0]['items'][0])
                 self.assertEqual(request('file/'+fid)[0],b'private support')
                 admin_cookie=cookie;cookie=''
@@ -141,7 +143,7 @@ class CloudWorkflow(unittest.TestCase):
                 profile['role']='owner'
                 overview=request('admin/overview')[0]['orders'][0]
                 self.assertEqual(overview['delivery']['address'],checkout['address'])
-                request('admin/order',{'id':oid,'status':'processing','note':'Préparation'})
+                request('admin/order',{'id':oid,'status':'processing','note':'PrÃ©paration'})
                 self.assertEqual(request('account')[0]['orders'][0]['status'],'processing')
                 self.assertEqual(len(request('admin/overview')[0]['orders'][0]['history']),1)
                 failed = True

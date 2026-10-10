@@ -9,7 +9,7 @@ DATA=Path(os.environ.get('LEX_DATA_DIR', '/tmp/lex-associes-data' if os.environ.
 DATA.mkdir(parents=True,exist_ok=True)
 (DATA/'files').mkdir(exist_ok=True)
 PORT=int(os.environ.get('LEX_PORT','4180'))
-RELEASE='20261010-attachments-3'
+RELEASE='20261010-attachments-4'
 from security import STAFF, initialize_security, suspended, audit, get_security, account_action, recover
 from admin_support import initialize_admin, admin_get, admin_post, track_visit, validate_content
 import seo
@@ -393,7 +393,8 @@ class App(SimpleHTTPRequestHandler):
       fid=secrets.token_hex(20);mime=mimetypes.guess_type(name)[0] or 'application/octet-stream';file_path=fid
       row=c.execute('SELECT * FROM items WHERE id=?',(itemid,)).fetchone();p=json.loads(row['payload'])
       if supabase_configured():
-       storage_path=itemid+'/'+fid+'/'+name
+       # Storage keys must remain ASCII; keep the original name in metadata.
+       storage_path='attachments/'+fid+Path(name).suffix.lower()
        supabase_upload('course-files',storage_path,raw,mime)
        file_path='supabase:'+storage_path
       else:(DATA/'files'/fid).write_bytes(raw)
