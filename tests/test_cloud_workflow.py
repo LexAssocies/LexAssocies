@@ -78,7 +78,7 @@ class CloudWorkflow(unittest.TestCase):
                 self.assertEqual(request('bootstrap')[0]['user']['role'], 'owner')
                 self.assertEqual(request('bootstrap')[0]['release'], server.RELEASE)
                 request('admin/unknown-file-action', {'id':'missing'}, 404)
-                item = {'id': 'cloud-training', 'kind': 'formation', 'title': 'Formation test', 'category': 'GÃ©nÃ©ral', 'status': 'published', 'price': 45000, 'modules': [], 'placements': []}
+                item = {'id': 'cloud-training', 'kind': 'formation', 'title': 'Formation test', 'category': 'Général', 'status': 'published', 'price': 45000, 'modules': [], 'placements': []}
                 request('admin/item', {'item': item})
                 self.assertEqual(len(request('admin')[0]['items']), 1)
                 self.assertEqual(request('bootstrap')[0]['items'][0]['price'], 45000)
@@ -143,7 +143,7 @@ class CloudWorkflow(unittest.TestCase):
                 profile['role']='owner'
                 overview=request('admin/overview')[0]['orders'][0]
                 self.assertEqual(overview['delivery']['address'],checkout['address'])
-                request('admin/order',{'id':oid,'status':'processing','note':'PrÃ©paration'})
+                request('admin/order',{'id':oid,'status':'processing','note':'Préparation'})
                 self.assertEqual(request('account')[0]['orders'][0]['status'],'processing')
                 self.assertEqual(len(request('admin/overview')[0]['orders'][0]['history']),1)
                 failed = True
