@@ -8,7 +8,7 @@
     { "src": "/api/(.*)", "dest": "/api/index.py" },
     { "src": "/assets/(.*)", "dest": "/dist/assets/$1" },
     { "src": "/(app|admin|security|analytics|router-seo|styles)\\.(js|css)", "dest": "/dist/$1.$2" },
-    { "src": "/(favicon(-48)?|apple-touch-icon|icon-(192|512))\\.(png|ico|svg)", "dest": "/dist/$1.$3" },
+    { "src": "/(favicon(-48)?|apple-touch-icon|icon-(192|512))\\.(png|ico|svg)", "dest": "/dist/$1.$4" },
     { "src": "/site\\.webmanifest", "dest": "/dist/site.webmanifest" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/dist/index.html" }
