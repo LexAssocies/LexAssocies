@@ -164,6 +164,18 @@ class App(SimpleHTTPRequestHandler):
  def do_GET(self):
   if not self.allowed_host():return self.reply({'error':'Hôte non autorisé.'},403)
   path=urlparse(self.path).path
+  if path.startswith('/api/cover/'):
+   name=path.rsplit('/',1)[-1]
+   if not re.fullmatch(r'[a-f0-9]{40}\.(png|jpg|webp)',name):return self.reply({'error':'Image introuvable.'},404)
+   try:
+    if supabase_configured():
+     from supabase_client import download_file
+     raw=download_file('course-files','covers/'+name)
+    else:raw=(DATA/'covers'/name).read_bytes()
+    self.send_response(200);self.send_header('Content-Type',{'png':'image/png','jpg':'image/jpeg','webp':'image/webp'}[name.rsplit('.',1)[-1]])
+    self.send_header('Content-Length',str(len(raw)));self.send_header('Cache-Control','public, max-age=31536000, immutable');self.headers_security();self.end_headers();self.wfile.write(raw)
+   except Exception:self.reply({'error':'Image indisponible.'},404)
+   return
   if path=='/api/seo':
    with db() as c:return self.reply(seo.metadata(c,parse_qs(urlparse(self.path).query).get('route',['/'])[0],self.headers.get('Host','')))
   if path in ('/robots.txt','/sitemap.xml'):
@@ -357,11 +369,21 @@ class App(SimpleHTTPRequestHandler):
     if path.startswith('/api/admin/'):
      if not c.in_transaction:c.execute('BEGIN IMMEDIATE')
      u=self.need(c,True)
-     if u['role']=='editor' and path not in ('/api/admin/item','/api/admin/upload','/api/admin/upload-remove','/api/admin/archive'):raise PermissionError('Le rôle rédacteur est limité aux contenus.')
+     if u['role']=='editor' and path not in ('/api/admin/item','/api/admin/upload','/api/admin/upload-remove','/api/admin/cover-upload','/api/admin/archive'):raise PermissionError('Le rôle rédacteur est limité aux contenus.')
      self.audit_actor=u;self.audit_action=path;self.audit_target=clean(data.get('id') or data.get('item_id') or data.get('item',{}).get('title'),250)
      if path=='/api/admin/order' and cloud_state.enabled():cloud_state.sync_orders(c)
      handled=admin_post(c,path,data,uid,now)
      if handled is not None:return self.reply(handled)
+     if path=='/api/admin/cover-upload':
+      raw=base64.b64decode(data.get('content',''),validate=True)
+      if not raw or len(raw)>2*1024*1024:raise ValueError('Choisissez une image de 2 Mo maximum.')
+      ext='png' if raw.startswith(b'\x89PNG\r\n\x1a\n') else 'jpg' if raw.startswith(b'\xff\xd8\xff') else 'webp' if raw.startswith(b'RIFF') and raw[8:12]==b'WEBP' else None
+      if not ext:raise ValueError('Choisissez une image PNG, JPEG ou WebP valide.')
+      name=secrets.token_hex(20)+'.'+ext;mime={'png':'image/png','jpg':'image/jpeg','webp':'image/webp'}[ext]
+      if supabase_configured():supabase_upload('course-files','covers/'+name,raw,mime)
+      else:
+       (DATA/'covers').mkdir(exist_ok=True);(DATA/'covers'/name).write_bytes(raw)
+      return self.reply({'ok':True,'image':'/api/cover/'+name})
      if path=='/api/admin/item':
       p=data.get('item',{});itemid=clean(p.get('id'),120) or secrets.token_hex(10);title=clean(p.get('title'),250);kind=p.get('kind');status=p.get('status','draft')
       if kind not in ('formation','document','resource','article','event','live','trainer','plan','watch'):raise ValueError('Type de contenu invalide.')

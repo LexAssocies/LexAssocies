@@ -59,6 +59,7 @@ editor=function(source){
  // Keep the save action after the page-placement choices.
  f.append(f.querySelector('.feedback').parentElement);
  compactModules(f);
+ coverImageEditor(f);
 };
 
 // Keep all values in the form while showing only the selected module.
@@ -97,4 +98,27 @@ function compactModules(form){
  addButton.onclick=()=>{add();const m=modules().at(-1);update(m);$('[name="mtitle"]',m).focus();};
  if(!modules().length&&form.elements.kind.value==='formation')add();
  update();
+}
+
+function coverImageEditor(form){
+ const input=form.elements.image,field=input.closest('.field');
+ const advanced=document.createElement('details');advanced.innerHTML='<summary>Utiliser une adresse d’image</summary>';
+ advanced.append(input.closest('label'));field.append(advanced);
+ const controls=document.createElement('div');controls.className='cover-image-editor';
+ controls.innerHTML='<h3>Image de couverture</h3><div class="cover-preview"></div><label>Choisir une image<input type="file" accept="image/png,image/jpeg,image/webp"></label><p class="tiny">PNG, JPEG ou WebP · 2 Mo maximum. Enregistrez le contenu pour appliquer votre choix sur le site.</p><button type="button" class="text-link">Retirer l’image</button><p role="status" class="feedback"></p>';
+ field.prepend(controls);
+ const file=$('input',controls),preview=$('.cover-preview',controls),remove=$('button',controls),message=$('[role="status"]',controls);
+ const draw=()=>{const src=safeUrl(input.value);preview.innerHTML=src?`<img src="${src}" alt="Aperçu de l’image de couverture">`:'<p class="muted">Aucune image de couverture.</p>';remove.hidden=!input.value;};
+ input.addEventListener('input',draw);draw();
+ remove.onclick=()=>{input.value='';file.value='';draw();message.textContent='Image retirée. Enregistrez le contenu pour confirmer.';};
+ file.onchange=async()=>{
+  const selected=file.files[0];if(!selected)return;
+  const save=form.querySelector('button:not([type])');save.disabled=true;file.disabled=true;remove.disabled=true;message.textContent='Chargement de l’image…';message.className='feedback';
+  try{
+   if(selected.size>2*1024*1024)throw Error('Choisissez une image de 2 Mo maximum.');
+   const content=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=()=>reject(Error('Impossible de lire cette image.'));reader.readAsDataURL(selected);});
+   const result=await api('admin/cover-upload',{content});input.value=result.image;draw();message.textContent='Image chargée. Enregistrez le contenu pour la publier.';message.className='feedback success';
+  }catch(err){message.textContent=err.message;message.className='feedback error';}
+  finally{save.disabled=false;file.disabled=false;remove.disabled=false;file.value='';}
+ };
 }

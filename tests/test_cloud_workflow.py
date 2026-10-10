@@ -38,7 +38,7 @@ class CloudWorkflow(unittest.TestCase):
             collection[payload['id']] = copy.deepcopy(payload)
             if collection is orders:collection[payload['id']]['created_at']='2026-10-09T00:00:00Z'
         def upload(bucket, path, raw, mime):
-            self.assertRegex(path,r'^attachments/[a-f0-9]{40}\.png$')
+            self.assertRegex(path,r'^(attachments|covers)/[a-f0-9]{40}\.png$')
             storage[path] = raw
         with patch.dict(os.environ, {'VERCEL': '1', 'LEX_SESSION_SECRET': 'regression-secret'}), \
              patch.object(supabase_client, 'SUPABASE_SERVICE_KEY', 'test-server-key'), \
@@ -99,6 +99,21 @@ class CloudWorkflow(unittest.TestCase):
                 request('admin/item', {'item': item})
                 self.assertEqual(len(catalogue), 1)
                 self.assertEqual(request('bootstrap')[0]['items'][0]['price'], 75000)
+                # Cover upload works before a content exists, and public reads survive cold starts.
+                image_bytes=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=')
+                cover=request('admin/cover-upload',{'content':base64.b64encode(image_bytes).decode()})[0]['image']
+                item['image']=cover
+                request('admin/item',{'item':item})
+                self.assertEqual(request('bootstrap')[0]['items'][0]['image'],cover)
+                admin_cookie=cookie;cookie=''
+                self.assertEqual(request(cover.removeprefix('/api/'))[0],image_bytes)
+                request('admin/cover-upload',{'content':base64.b64encode(image_bytes).decode()},403)
+                cookie=admin_cookie
+                request('admin/cover-upload',{'content':base64.b64encode(b'<svg></svg>').decode()},400)
+                request('admin/cover-upload',{'content':base64.b64encode(b'x'*(2*1024*1024+1)).decode()},400)
+                item['image']=''
+                request('admin/item',{'item':item})
+                self.assertEqual(request('bootstrap')[0]['items'][0]['image'],'')
                 # Uploads remain downloadable after cold start, then detach reliably.
                 fid=request('admin/upload',{'item_id':item['id'],'name':'Logo moderne LEX ASSOCIÉS en orange et turquoise (1).png','content':base64.b64encode(b'private support').decode()})[0]['id']
                 self.assertEqual(len(request('item/'+item['id'])[0]['files']),1)
