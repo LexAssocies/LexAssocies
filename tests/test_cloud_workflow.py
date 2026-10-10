@@ -16,6 +16,7 @@ os.environ['LEX_DATA_DIR'] = tempfile.mkdtemp()
 os.environ['LEX_PORT'] = '4187'
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import server
+from api.index import handler as VercelHandler
 import cloud_state
 import supabase_client
 
@@ -45,7 +46,7 @@ class CloudWorkflow(unittest.TestCase):
              patch.object(server, 'supabase_upload', upload), \
              patch.object(supabase_client, 'download_file', side_effect=lambda bucket,path:storage[path]), \
              patch.object(server, 'supabase_auth_login', return_value={'access_token': 'test-jwt', 'user': {'id': profile['id']}}):
-            http = server.ThreadingHTTPServer(('127.0.0.1', 4187), server.App)
+            http = server.ThreadingHTTPServer(('127.0.0.1', 4187), VercelHandler)
             threading.Thread(target=http.serve_forever, daemon=True).start()
             cookie = ''
             def request(route, body=None, expected=200):
@@ -54,7 +55,7 @@ class CloudWorkflow(unittest.TestCase):
                 server.DATA = Path(tempfile.mkdtemp())
                 (server.DATA / 'files').mkdir()
                 server.initialize()
-                req = urllib.request.Request('http://127.0.0.1:4187/api/' + route,
+                req = urllib.request.Request('http://127.0.0.1:4187/api/index.py?__path=' + urllib.parse.quote('/api/' + route, safe=''),
                     data=json.dumps(body).encode() if body is not None else None,
                     headers={'Cookie': cookie, 'Origin': 'http://127.0.0.1:4187', 'Content-Type': 'application/json'})
                 try:
@@ -74,6 +75,8 @@ class CloudWorkflow(unittest.TestCase):
                 _, headers = request('login', {'email': 'admin@example.test', 'password': 'example-password'})
                 cookie = next(x.split(';')[0] for x in headers.get_all('Set-Cookie') if x.startswith('lex_cloud='))
                 self.assertEqual(request('bootstrap')[0]['user']['role'], 'owner')
+                self.assertEqual(request('bootstrap')[0]['release'], server.RELEASE)
+                request('admin/unknown-file-action', {'id':'missing'}, 404)
                 item = {'id': 'cloud-training', 'kind': 'formation', 'title': 'Formation test', 'category': 'Général', 'status': 'published', 'price': 45000, 'modules': [], 'placements': []}
                 request('admin/item', {'item': item})
                 self.assertEqual(len(request('admin')[0]['items']), 1)
@@ -90,6 +93,7 @@ class CloudWorkflow(unittest.TestCase):
                 profile['role'] = 'owner'
                 request('admin/archive', {'id': item['id'], 'restore': True})
                 self.assertEqual(request('bootstrap')[0]['items'][0]['price'], 45000)
+                item['_supabase_id'] = 'wrong-client-supabase-id'
                 item['price'] = 75000
                 request('admin/item', {'item': item})
                 self.assertEqual(len(catalogue), 1)
@@ -97,7 +101,18 @@ class CloudWorkflow(unittest.TestCase):
                 # Uploads remain downloadable after cold start, then detach reliably.
                 fid=request('admin/upload',{'item_id':item['id'],'name':'support.txt','content':base64.b64encode(b'private support').decode()})[0]['id']
                 self.assertEqual(len(request('item/'+item['id'])[0]['files']),1)
+                self.assertNotIn('_attachments',request('bootstrap')[0]['items'][0])
                 self.assertEqual(request('file/'+fid)[0],b'private support')
+                admin_cookie=cookie;cookie=''
+                self.assertEqual(request('item/'+item['id'])[0]['files'][0]['id'],fid)
+                request('file/'+fid,expected=403)
+                cookie=admin_cookie
+                request('admin/archive',{'id':item['id']})
+                cookie=''
+                request('item/'+item['id'],expected=404)
+                cookie=admin_cookie
+                request('admin/archive',{'id':item['id'],'restore':True})
+                self.assertEqual(request('item/'+item['id'])[0]['files'][0]['id'],fid)
                 # A stale edit must not discard newly attached files.
                 item['purchasable']=True
                 request('admin/item',{'item':item})

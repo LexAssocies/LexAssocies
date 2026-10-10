@@ -9,6 +9,7 @@ DATA=Path(os.environ.get('LEX_DATA_DIR', '/tmp/lex-associes-data' if os.environ.
 DATA.mkdir(parents=True,exist_ok=True)
 (DATA/'files').mkdir(exist_ok=True)
 PORT=int(os.environ.get('LEX_PORT','4180'))
+RELEASE='20261010-attachments-3'
 from security import STAFF, initialize_security, suspended, audit, get_security, account_action, recover
 from admin_support import initialize_admin, admin_get, admin_post, track_visit, validate_content
 import seo
@@ -62,6 +63,7 @@ def initialize():
 
 def pack(row,full=False):
  p=json.loads(row['payload']);p.update(id=row['id'],kind=row['kind'],title=row['title'],category=row['category'],status=row['status'],updated=row['updated'])
+ for key in ('_attachments','_supabase_id','_local_id'):p.pop(key,None)
  if not full:
   for m in p.get('modules',[]):
    m.pop('body',None);m.pop('video',None);m.pop('quiz',None);m.pop('exercise',None);m.pop('correction',None)
@@ -103,6 +105,7 @@ class App(SimpleHTTPRequestHandler):
     self.audit_actor=None
    self.transaction.commit();self.transaction=None
   raw=json.dumps(data,ensure_ascii=False).encode();self.send_response(status);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Length',str(len(raw)));self.send_header('Cache-Control','no-store');self.headers_security()
+  self.send_header('X-Lex-Release',RELEASE)
   if cookie:
    for value in (cookie if isinstance(cookie,(list,tuple)) else [cookie]): self.send_header('Set-Cookie',value)
   self.end_headers();self.wfile.write(raw)
@@ -186,7 +189,7 @@ class App(SimpleHTTPRequestHandler):
      # En production, Supabase Auth contient déjà le compte principal ;
      # ne jamais afficher l'assistant de première installation sur Vercel.
      setup=(not c.execute("SELECT 1 FROM users WHERE role='owner'").fetchone()) and not supabase_configured()
-     return self.reply({'items':items,'user':{k:u[k] for k in ('id','name','email','role')} if u else None,'setup':setup,'payments':False})
+     return self.reply({'items':items,'user':{k:u[k] for k in ('id','name','email','role')} if u else None,'setup':setup,'payments':False,'release':RELEASE})
     if path.startswith('/api/item/'):
      itemid=unquote(path.split('/')[-1]);r=c.execute('SELECT * FROM items WHERE id=?',(itemid,)).fetchone()
      if not r or (r['status']!='published' and (not u or u['role'] not in STAFF)):return self.reply({'error':'Contenu introuvable.'},404)
@@ -365,7 +368,9 @@ class App(SimpleHTTPRequestHandler):
       if not title:raise ValueError('Un titre est obligatoire.')
       if status not in ('draft','published','archived'):raise ValueError('Statut invalide.')
       existing=c.execute('SELECT payload FROM items WHERE id=?',(itemid,)).fetchone()
-      if existing:p['_attachments']=json.loads(existing['payload']).get('_attachments',[])
+      if existing:
+       stored=json.loads(existing['payload']);p['_attachments']=stored.get('_attachments',[])
+       if stored.get('_supabase_id'):p['_supabase_id']=stored['_supabase_id']
       else:p.pop('_attachments',None)
       p['price']=None if p.get('price') is None or p.get('price')=='' else int(p['price'])
       if p['price'] is not None and p['price']<0:raise ValueError('Prix invalide.')
@@ -410,6 +415,7 @@ class App(SimpleHTTPRequestHandler):
       return self.reply({'ok':True})
      if path=='/api/admin/message':c.execute('UPDATE messages SET status=? WHERE id=?',('processed',clean(data.get('id'),120)));return self.reply({'ok':True})
      if path=='/api/admin/newsletter-delete':c.execute('DELETE FROM newsletter WHERE email=?',(email(data.get('email')),));return self.reply({'ok':True})
+     return self.reply({'error':'Action d’administration inconnue. Actualisez la page pour charger la dernière version.'},404)
     if path=='/api/order':
      delivery={k:clean(data.get(k),n) for k,n in [('last_name',100),('first_name',100),('phone',40),('address',1000)]}
      if not all(delivery.values()):raise ValueError('Complétez votre nom, vos prénoms, votre téléphone et votre adresse de livraison.')
